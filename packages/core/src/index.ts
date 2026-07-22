@@ -1,5 +1,6 @@
 export { createSupabaseClient } from './supabase'
-export type { SupabaseClient, Database } from './supabase'
+export type { SupabaseClient } from './supabase'
+export type { Database, Json, Tables, TablesInsert, TablesUpdate, Enums } from './database.types'
 
 export { createAccount, getAccounts, archiveAccount, renameAccount, updateAccountBalance } from './accounts'
 export { createTransaction, undoTransaction, createOpeningBalance, getTransactions, getMonthlySummary } from './transactions'

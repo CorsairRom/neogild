@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@neogild/core": "*",
+    "@neogild/gmail": "*",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.0",
     "next": "15.3.3",
