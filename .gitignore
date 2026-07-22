@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+.next/
+out/
+dist/
+.turbo/
+
+# Env
+.env
+.env.local
+.env*.local
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Debug
+npm-debug.log*
+*.log
+
+# Types (regenerate with npm run db:types)
+packages/core/src/database.types.ts

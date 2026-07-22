@@ -1,0 +1,24 @@
+{
+  "name": "neogild",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "dev:web": "turbo dev --filter=@neogild/web",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "db:start": "npx supabase start",
+    "db:stop": "npx supabase stop",
+    "db:reset": "npx supabase db reset",
+    "db:types": "npx supabase gen types typescript --local > packages/core/src/database.types.ts"
+  },
+  "packageManager": "npm@10.9.2",
+  "devDependencies": {
+    "supabase": "^2.30.0",
+    "turbo": "^2.6.0",
+    "typescript": "^5.8.0"
+  }
+}
