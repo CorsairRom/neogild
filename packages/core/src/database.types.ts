@@ -1317,6 +1317,16 @@ export type Database = {
         }
       }
       archive_debt: { Args: { p_debt_id: string }; Returns: Json }
+      classify_transaction: {
+        Args: {
+          p_category: string
+          p_confidence?: number
+          p_needs_review?: boolean
+          p_transaction_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       complete_onboarding: { Args: { p_data: Json }; Returns: Json }
       create_account: {
         Args: {

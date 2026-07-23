@@ -666,6 +666,7 @@ export type Database = {
           account_id: string
           amount: number
           category: string | null
+          category_confidence: number | null
           created_at: string
           date: string
           debt_id: string | null
@@ -674,6 +675,7 @@ export type Database = {
           id: string
           linked_invoice_id: string | null
           metadata: Json | null
+          needs_review: boolean
           reimbursable: boolean
           transfer_to: string | null
           type: Database["public"]["Enums"]["transaction_type"]
@@ -1005,6 +1007,7 @@ export type Database = {
           account_id: string
           amount: number
           category: string | null
+          category_confidence: number | null
           created_at: string
           date: string
           debt_id: string | null
@@ -1013,6 +1016,7 @@ export type Database = {
           id: string
           linked_invoice_id: string | null
           metadata: Json | null
+          needs_review: boolean
           reimbursable: boolean
           transfer_to: string | null
           type: Database["public"]["Enums"]["transaction_type"]
@@ -1164,6 +1168,7 @@ export type Database = {
           account_id: string
           amount: number
           category: string | null
+          category_confidence: number | null
           created_at: string
           date: string
           debt_id: string | null
@@ -1172,6 +1177,7 @@ export type Database = {
           id: string
           linked_invoice_id: string | null
           metadata: Json | null
+          needs_review: boolean
           reimbursable: boolean
           transfer_to: string | null
           type: Database["public"]["Enums"]["transaction_type"]
@@ -1317,6 +1323,7 @@ export type Database = {
           account_id: string
           amount: number
           category: string | null
+          category_confidence: number | null
           created_at: string
           date: string
           debt_id: string | null
@@ -1325,6 +1332,7 @@ export type Database = {
           id: string
           linked_invoice_id: string | null
           metadata: Json | null
+          needs_review: boolean
           reimbursable: boolean
           transfer_to: string | null
           type: Database["public"]["Enums"]["transaction_type"]

@@ -7,6 +7,21 @@ export type UncategorizedTransaction = Database['public']['Tables']['transaction
 export type EmailMovement = Database['public']['Tables']['email_movements']['Row']
 export type CategorizationRule = Database['public']['Tables']['categorization_rules']['Row']
 
+/** Transactions awaiting review: uncategorized or LLM-flagged. */
+export async function getReviewTransactions(
+  supabase: TypedClient,
+): Promise<UncategorizedTransaction[]> {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('*')
+    .in('type', ['income', 'expense', 'refund'])
+    .or('category.is.null,needs_review.eq.true')
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data
+}
+
 /** Transactions awaiting a category (NULL), newest first. */
 export async function getUncategorizedTransactions(
   supabase: TypedClient,

@@ -147,7 +147,7 @@ export async function runEmailSync(
       continue
     }
 
-    if (result !== null && result !== 'ignore') parsed++
+    if (result !== null) parsed++
   }
 
   const usdRate = await fetchUsdRate()

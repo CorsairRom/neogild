@@ -11,6 +11,7 @@ export { getMonthlyBuckets } from './buckets'
 export type { MonthlyBuckets, MonthlyBucketsOptions } from './buckets'
 export {
   getUncategorizedTransactions,
+  getReviewTransactions,
   getEmailMovements,
   setTransactionCategory,
   getCategorizationRules,
@@ -27,8 +28,15 @@ export type {
   PromoteSummary,
   SyncState,
 } from './inbox'
-export { triggerGmailSync } from './sync'
+export {
+  matchCategoryByRules,
+  merchantPatternFromDescription,
+  shouldAutoApplyLlm,
+  shouldNeedsReview,
+  CONFIDENCE_AUTO,
+} from './categorize'
 export type { GmailSyncSummary } from './sync'
+export { triggerGmailSync } from './sync'
 export {
   getRecurringStatus,
   processDueRecurringCharges,
