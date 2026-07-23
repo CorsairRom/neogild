@@ -4,6 +4,8 @@ import { getEmailConnectionStatus } from "@/lib/email/credentials";
 import { AppNav } from "@/components/app-nav";
 import { SyncButton } from "@/components/gmail-sync";
 
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const { supabase, user } = await requireOnboarded();
   const connection = await getEmailConnectionStatus(user.id);

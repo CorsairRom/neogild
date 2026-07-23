@@ -1,8 +1,41 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+
+type SyncSummary = {
+  fetched?: number;
+  parsed?: number;
+  promoted?: number;
+  forwards?: number;
+  errors?: number;
+  staged_errors?: number;
+  pending?: number;
+  failures?: string[];
+};
+
+function formatSyncSummary(data: SyncSummary): string {
+  const parts = [
+    `Fetched ${data.fetched ?? 0}`,
+    `parsed ${data.parsed ?? 0}`,
+    `promoted ${data.promoted ?? 0}`,
+    `forwards ${data.forwards ?? 0}`,
+  ];
+  const promoteErrors = (data.errors ?? 0) - (data.staged_errors ?? 0);
+  if ((data.staged_errors ?? 0) > 0) {
+    parts.push(`${data.staged_errors} parse errors`);
+  }
+  if (promoteErrors > 0) {
+    parts.push(`${promoteErrors} promote errors`);
+  }
+  if ((data.pending ?? 0) > 0) {
+    parts.push(`${data.pending} pending (USD rate)`);
+  }
+  return parts.join(", ");
+}
 
 export function SyncButton({ since }: { since?: string }) {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -17,11 +50,17 @@ export function SyncButton({ since }: { since?: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(since ? { since } : {}),
       });
-      const data = await res.json();
+      const data = (await res.json()) as SyncSummary & { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Sync failed");
-      setResult(
-        `Fetched ${data.fetched}, parsed ${data.parsed}, promoted ${data.promoted}, forwards ${data.forwards ?? 0}`,
-      );
+      setResult(formatSyncSummary(data));
+      if ((data.failures?.length ?? 0) > 0) {
+        setError(data.failures!.join(" · "));
+      } else if ((data.promoted ?? 0) === 0 && (data.parsed ?? 0) > 0) {
+        setError(
+          "Correos parseados pero no promovidos. Revisa /inbox (errores de cuenta) o Configuración → Cuentas.",
+        );
+      }
+      router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {

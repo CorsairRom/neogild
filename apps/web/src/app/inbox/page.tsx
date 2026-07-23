@@ -2,6 +2,8 @@ import { requireOnboarded } from "@/lib/auth/session";
 import { AppNav } from "@/components/app-nav";
 import { SyncButton } from "@/components/gmail-sync";
 
+export const dynamic = "force-dynamic";
+
 function formatCLP(amount: number | null) {
   if (amount == null) return "—";
   return new Intl.NumberFormat("es-CL", {
@@ -38,6 +40,7 @@ export default async function InboxPage() {
 
   const pending = movements?.filter((m) => m.status === "pending").length ?? 0;
   const errors = movements?.filter((m) => m.status === "error").length ?? 0;
+  const promoted = movements?.filter((m) => m.status === "promoted").length ?? 0;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-8">
@@ -45,7 +48,18 @@ export default async function InboxPage() {
         <AppNav />
         <h1 className="text-2xl font-semibold">Correos bancarios</h1>
         <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Staging de ingesta: {pending} pendientes, {errors} con error.
+          Staging de ingesta: {pending} pendientes, {errors} con error
+          {promoted > 0 ? `, ${promoted} promovidos` : ""}.
+          {errors > 0 && (
+            <>
+              {" "}
+              Si ves «no account matches hint», revisa los últimos 4 dígitos en{" "}
+              <a href="/settings/accounts" className="underline">
+                Cuentas
+              </a>
+              .
+            </>
+          )}
         </p>
         <SyncButton />
       </header>
@@ -66,7 +80,7 @@ export default async function InboxPage() {
             {(movements ?? []).length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-3 py-8 text-center text-zinc-500">
-                  Sin correos aún. Conecta Gmail y ejecuta sync.
+                  Sin correos aún. Conecta IMAP en Configuración y ejecuta sync.
                 </td>
               </tr>
             ) : (
@@ -89,7 +103,11 @@ export default async function InboxPage() {
                       : formatCLP(m.amount)}
                   </td>
                   <td className="max-w-xs truncate px-3 py-2 text-xs text-zinc-500">
-                    {m.error_detail ?? m.raw_snippet?.slice(0, 80) ?? "—"}
+                    {m.status === "error" && m.error_detail ? (
+                      <span className="text-red-600 dark:text-red-400">{m.error_detail}</span>
+                    ) : (
+                      m.raw_snippet?.slice(0, 80) ?? "—"
+                    )}
                   </td>
                 </tr>
               ))
