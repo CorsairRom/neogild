@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "turbo dev",
     "dev:web": "turbo dev --filter=@neogild/web",
+    "sync:gmail": "node --env-file=apps/web/.env.local scripts/sync-gmail.mjs",
     "build": "turbo build",
     "typecheck": "turbo typecheck",
     "db:start": "npx supabase start",

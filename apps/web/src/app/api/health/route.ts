@@ -17,7 +17,7 @@ export async function GET() {
       ok: true,
       db: "connected",
       service: "neogild",
-      phase: "F0",
+      phase: "F1",
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

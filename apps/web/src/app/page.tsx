@@ -1,19 +1,11 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requireOnboarded } from "@/lib/auth/session";
 import { getGmailConnectionStatus } from "@/lib/gmail/credentials";
+import { AppNav } from "@/components/app-nav";
 import { SyncButton } from "@/components/gmail-sync";
 
 export default async function HomePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
+  const { supabase, user } = await requireOnboarded();
   const connection = await getGmailConnectionStatus(user.id);
 
   const { count: txCount } = await supabase
@@ -30,20 +22,19 @@ export default async function HomePage() {
     .select("*", { count: "exact", head: true })
     .eq("status", "error");
 
+  const { data: syncState } = await supabase
+    .from("sync_state")
+    .select("gmail_watermark, updated_at")
+    .maybeSingle();
+
   return (
     <div className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 p-8">
-      <header className="flex items-center justify-between border-b border-zinc-200 pb-6 dark:border-zinc-800">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Neogild</h1>
-          <p className="text-sm text-zinc-500">{user.email}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/settings"
-            className="text-sm text-zinc-600 hover:underline dark:text-zinc-400"
-          >
-            Configuración
-          </Link>
+      <header className="space-y-4 border-b border-zinc-200 pb-6 dark:border-zinc-800">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Neogild</h1>
+            <p className="text-sm text-zinc-500">{user.email}</p>
+          </div>
           <form action="/auth/signout" method="post">
             <button
               type="submit"
@@ -53,6 +44,7 @@ export default async function HomePage() {
             </button>
           </form>
         </div>
+        <AppNav />
       </header>
 
       <section className="grid gap-4 sm:grid-cols-3">
@@ -62,13 +54,34 @@ export default async function HomePage() {
       </section>
 
       <section className="rounded-lg border border-zinc-200 p-6 dark:border-zinc-800">
-        <h2 className="mb-2 font-medium">Fase 1 — Ingesta Gmail</h2>
+        <h2 className="mb-2 font-medium">Gmail sync</h2>
         <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
           {connection.connected
-            ? "Gmail conectado. Sincroniza alertas bancarias o reenvía correos históricos."
-            : "Conecta Gmail en Configuración para empezar a importar movimientos."}
+            ? `Conectado${connection.email ? `: ${connection.email}` : ""}. Último watermark: ${syncState?.gmail_watermark ? new Date(syncState.gmail_watermark).toLocaleString("es-CL") : "nunca"}.`
+            : "Conecta Gmail en Configuración."}
         </p>
-        {connection.connected && <SyncButton />}
+        {connection.connected ? (
+          <div className="flex flex-wrap gap-3">
+            <SyncButton />
+            <Link href="/inbox" className="text-sm underline text-zinc-600">
+              Ver correos →
+            </Link>
+          </div>
+        ) : (
+          <Link href="/settings" className="text-sm underline">
+            Ir a configuración Gmail
+          </Link>
+        )}
+      </section>
+
+      <section className="rounded-lg border border-dashed border-zinc-300 p-4 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
+        <p className="font-medium text-zinc-800 dark:text-zinc-200">Checklist F1</p>
+        <ul className="mt-2 list-inside list-disc space-y-1">
+          <li>Cuentas con ****1234 o número de cuenta configuradas</li>
+          <li>Gmail conectado (OAuth o GMAIL_REFRESH_TOKEN)</li>
+          <li>Sync → transacciones visibles arriba</li>
+          <li>Reenvíos históricos → inbox sin duplicar</li>
+        </ul>
       </section>
     </div>
   );

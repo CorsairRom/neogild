@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { requireOnboarded } from "@/lib/auth/session";
 import { getGmailConnectionStatus } from "@/lib/gmail/credentials";
+import { AppNav } from "@/components/app-nav";
 import { GmailConnectLink, SyncButton } from "@/components/gmail-sync";
 
 export default async function SettingsPage({
@@ -9,22 +10,17 @@ export default async function SettingsPage({
   searchParams: Promise<{ error?: string; connected?: string }>;
 }) {
   const params = await searchParams;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return null;
-
+  const { user } = await requireOnboarded();
   const connection = await getGmailConnectionStatus(user.id);
 
   return (
     <div className="mx-auto max-w-2xl space-y-8 p-8">
-      <header>
+      <header className="space-y-3">
+        <AppNav />
         <Link href="/" className="text-sm text-zinc-500 hover:underline">
           ← Inicio
         </Link>
-        <h1 className="mt-2 text-2xl font-semibold">Configuración</h1>
+        <h1 className="text-2xl font-semibold">Gmail</h1>
       </header>
 
       {params.error && (
