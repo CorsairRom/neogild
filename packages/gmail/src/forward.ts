@@ -1,7 +1,8 @@
 import type { RawEmail } from './parsers'
 
-const FORWARD_SUBJECT = /^(?:fwd|fw|reenviado)\s*:/i
+const FORWARD_SUBJECT = /^(?:fwd|fw|rv|reenviado|reenv[ií]o)\s*:/i
 const FORWARD_BLOCK = /-{5,}\s*(?:forwarded message|mensaje reenviado)\s*-{5,}/i
+const OUTLOOK_FORWARD = /reenvi[oó]\s+(?:este\s+)?mensaje/i
 
 function stripTags(html: string): string {
   return html
@@ -15,7 +16,8 @@ function stripTags(html: string): string {
 export function isForwarded(email: RawEmail): boolean {
   if (FORWARD_SUBJECT.test(email.subject.trim())) return true
   const plain = stripTags(email.body)
-  return FORWARD_BLOCK.test(plain)
+  if (FORWARD_BLOCK.test(plain)) return true
+  return OUTLOOK_FORWARD.test(plain)
 }
 
 /** Extract inner bank email from a Gmail forward wrapper. */
@@ -36,14 +38,19 @@ export function unwrapForward(email: RawEmail): RawEmail {
 
   const dateHeader =
     plain.match(/^Date:\s*(.+)$/im)?.[1]?.trim() ??
-    plain.match(/^Fecha:\s*(.+)$/im)?.[1]?.trim()
+    plain.match(/^Fecha:\s*(.+)$/im)?.[1]?.trim() ??
+    plain.match(/^Enviado:\s*(.+)$/im)?.[1]?.trim()
 
-  const bodyMatch = plain.match(
-    FORWARD_BLOCK,
-  )
+  const bodyMatch = plain.match(FORWARD_BLOCK)
   let body = plain
   if (bodyMatch?.index !== undefined) {
     body = plain.slice(bodyMatch.index + bodyMatch[0].length).trim()
+  } else {
+    // Outlook / Apple Mail: De/Enviado/Para/Asunto block without dashed separator
+    const outlookBody = plain.match(
+      /(?:^|\n)Asunto:\s*.+\r?\n([\s\S]+)$/im,
+    )?.[1]
+    if (outlookBody) body = outlookBody.trim()
   }
 
   const movementDate =

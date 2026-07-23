@@ -2,7 +2,6 @@ import { ImapFlow } from 'imapflow'
 import { simpleParser } from 'mailparser'
 import type { EmailClient, ImapCredentials } from './email-client'
 import { normalizeAppPassword } from './email-client'
-import { isKnownSender } from './senders'
 import type { RawEmail } from './parsers'
 
 function stableMessageId(
@@ -50,7 +49,6 @@ export async function fetchBankEmailsSince(
       { source: true, envelope: true, uid: true },
     )) {
       const envelopeFrom = msg.envelope?.from?.[0]?.address ?? ''
-      if (!isKnownSender(envelopeFrom)) continue
 
       const source = msg.source
       if (!source) continue
@@ -60,7 +58,6 @@ export async function fetchBankEmailsSince(
         parsed.from?.value?.[0]?.address ??
         parsed.from?.text ??
         envelopeFrom
-      if (!isKnownSender(from)) continue
 
       const date = parsed.date ?? msg.envelope?.date ?? new Date()
       const subject = parsed.subject ?? msg.envelope?.subject ?? ''

@@ -125,7 +125,6 @@ export async function runEmailSync(
       stagedErrors++
     } else {
       row = { ...result, status: 'pending' }
-      parsed++
     }
 
     const { error: insertError } = await supabase
@@ -145,7 +144,10 @@ export async function runEmailSync(
       } else {
         stagedErrors++
       }
+      continue
     }
+
+    if (result !== null && result !== 'ignore') parsed++
   }
 
   const usdRate = await fetchUsdRate()
@@ -157,7 +159,9 @@ export async function runEmailSync(
     throw new Error(`promote failed: ${promoteError.message}`)
   }
 
-  if (failures.length === 0) {
+  // Do not advance watermark on empty fetches — avoids skipping forwards that
+  // were filtered out (e.g. before IMAP included non-bank senders).
+  if (failures.length === 0 && emails.length > 0) {
     await supabase.from('sync_state').upsert({
       user_id: userId,
       gmail_watermark: runStartedAt.toISOString(),
