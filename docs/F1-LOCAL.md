@@ -1,6 +1,8 @@
-# Fase 1 — Guía local (cerrar ingesta Gmail)
+# Fase 1 — Guía local (cerrar ingesta de correos)
 
 Todo corre en tu máquina. **No necesitas Coolify** para cerrar F1.
+
+Ingesta vía **IMAP + App Password** (ADR-012). Sin Google Cloud Console ni OAuth.
 
 ## Estado del stack local
 
@@ -17,8 +19,8 @@ Verificar: `curl http://localhost:3000/api/health` → `{"ok":true,...}`
 
 ## Checklist F1 (criterios de éxito)
 
-- [ ] **Cuentas** configuradas con `****1234` o número de cuenta (`/onboard`)
-- [ ] **Gmail** conectado (`/settings` → OAuth o `GMAIL_REFRESH_TOKEN`)
+- [ ] **Cuentas** configuradas con últimos 4 dígitos o hint correcto (`/onboard`)
+- [ ] **Correo IMAP** conectado (`/settings` → App Password o `.env`)
 - [ ] **Sync** trae correos → aparecen en `/inbox`
 - [ ] **Promote** crea transacciones → contador en home > 0
 - [ ] **Re-forward** de correos antiguos no duplica (`gmail_message_id`)
@@ -46,52 +48,45 @@ http://localhost:3000/onboard
 
 Por cada banco/producto que uses, indica:
 - **TC**: últimos 4 dígitos (como aparecen en el correo `****1234`)
-- **Cuenta corriente**: dígitos sin guiones (como los normaliza el parser)
+- **Cuenta corriente / CuentaRUT**: últimos 4 dígitos del débito (como en el correo)
 
 Sin esto, `promote_email_movements` falla con *"no account matches hint"*.
 
-### 4. Conectar Gmail
+### 4. Conectar correo (IMAP)
 
-**Opción A — OAuth (recomendada)**
+**En Gmail (buzón dedicado):**
 
-1. [Google Cloud Console](https://console.cloud.google.com/) → OAuth client (Web)
-2. Redirect URI: `http://localhost:3000/api/gmail/callback`
-3. Gmail API habilitada
-4. En `apps/web/.env.local`:
+1. Settings → Forwarding and POP/IMAP → **Enable IMAP**
+2. Google Account → Security → 2-Step Verification
+3. App Passwords → Mail → copiar clave de 16 caracteres
+
+**Opción A — UI (recomendada)**
+
+1. `/settings` → usuario Gmail + App Password → **Conectar IMAP**
+
+**Opción B — `.env.local` (dev rápido / CLI)**
 
 ```env
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GOOGLE_REDIRECT_URI=http://localhost:3000/api/gmail/callback
+GMAIL_USER=neogild@gmail.com
+GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
-5. `/settings` → **Conectar Gmail**
-
-**Opción B — Refresh token manual (dev rápido)**
-
-OAuth Playground → scope `gmail.readonly` → pegar en `.env.local`:
-
-```env
-GMAIL_REFRESH_TOKEN=1//...
-```
-
 ### 5. Sync
 
-- UI: botón **Sync Gmail** en home o `/inbox`
+- UI: botón **Sync correos** en home o `/inbox`
 - CLI:
 
 ```bash
 export NEOGILD_USER_ID=<tu-user-uuid>
-export GMAIL_REFRESH_TOKEN=...
-export GOOGLE_CLIENT_ID=...
-export GOOGLE_CLIENT_SECRET=...
+export GMAIL_USER=neogild@gmail.com
+export GMAIL_APP_PASSWORD=...
 export SUPABASE_SERVICE_ROLE_KEY=...
 
-npm run sync:gmail
-npm run sync:gmail -- --since=2026-01-01   # backfill
+npm run sync:email
+npm run sync:email -- --since=2026-01-01   # backfill
 ```
 
 ### 6. Reenviar histórico
@@ -105,9 +100,8 @@ Vuelve a sync. Revisa `/inbox` (estado `promoted` o `error`).
 
 | Bloqueo | Qué hacer |
 |---------|-----------|
-| OAuth Google | Client ID/Secret + redirect URI |
-| Gmail API disabled | Habilitar en Cloud Console |
-| 0 transacciones tras sync | Revisar `/onboard` — falta ****1234 |
+| IMAP login failed | Verificar App Password + IMAP habilitado |
+| 0 transacciones tras sync | Revisar `/onboard` — falta hint de cuenta |
 | `promote failed: no account matches hint` | Editar metadata en Studio o re-onboard |
 | Correos en `error` | Copiar `error_detail` de `/inbox` — ajustar parser |
 
@@ -115,9 +109,9 @@ Vuelve a sync. Revisa `/inbox` (estado `promoted` o `error`).
 
 ## Cuándo desplegar en Coolify
 
-**No hace falta para cerrar F1.** Despliega cuando quieras sync automático 24/7 sin tu PC encendida.
+**No hace falta para cerrar F1.** Despliega cuando quieras sync automático 24/7 (`npm run sync:email` en cron).
 
-Local basta para: OAuth, sync manual, forwards, validar parsers con correos reales.
+Local basta para: IMAP, sync manual, forwards, validar parsers con correos reales.
 
 ---
 

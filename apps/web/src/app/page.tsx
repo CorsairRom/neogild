@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { requireOnboarded } from "@/lib/auth/session";
-import { getGmailConnectionStatus } from "@/lib/gmail/credentials";
+import { getEmailConnectionStatus } from "@/lib/email/credentials";
 import { AppNav } from "@/components/app-nav";
 import { SyncButton } from "@/components/gmail-sync";
 
 export default async function HomePage() {
   const { supabase, user } = await requireOnboarded();
-  const connection = await getGmailConnectionStatus(user.id);
+  const connection = await getEmailConnectionStatus(user.id);
 
   const { count: txCount } = await supabase
     .from("transactions")
@@ -54,11 +54,11 @@ export default async function HomePage() {
       </section>
 
       <section className="rounded-lg border border-zinc-200 p-6 dark:border-zinc-800">
-        <h2 className="mb-2 font-medium">Gmail sync</h2>
+        <h2 className="mb-2 font-medium">Sync correos</h2>
         <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
           {connection.connected
             ? `Conectado${connection.email ? `: ${connection.email}` : ""}. Último watermark: ${syncState?.gmail_watermark ? new Date(syncState.gmail_watermark).toLocaleString("es-CL") : "nunca"}.`
-            : "Conecta Gmail en Configuración."}
+            : "Conecta IMAP en Configuración."}
         </p>
         {connection.connected ? (
           <div className="flex flex-wrap gap-3">
@@ -69,7 +69,7 @@ export default async function HomePage() {
           </div>
         ) : (
           <Link href="/settings" className="text-sm underline">
-            Ir a configuración Gmail
+            Ir a configuración de correo
           </Link>
         )}
       </section>
@@ -78,7 +78,7 @@ export default async function HomePage() {
         <p className="font-medium text-zinc-800 dark:text-zinc-200">Checklist F1</p>
         <ul className="mt-2 list-inside list-disc space-y-1">
           <li>Cuentas con ****1234 o número de cuenta configuradas</li>
-          <li>Gmail conectado (OAuth o GMAIL_REFRESH_TOKEN)</li>
+          <li>Correo IMAP conectado (App Password)</li>
           <li>Sync → transacciones visibles arriba</li>
           <li>Reenvíos históricos → inbox sin duplicar</li>
         </ul>

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getGmailConnectionStatus } from '@/lib/gmail/credentials'
+import { getEmailConnectionStatus } from '@/lib/email/credentials'
 
 export async function GET() {
   const supabase = await createClient()
@@ -12,7 +12,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const connection = await getGmailConnectionStatus(user.id)
+  const connection = await getEmailConnectionStatus(user.id)
 
   const { data: syncState } = await supabase
     .from('sync_state')

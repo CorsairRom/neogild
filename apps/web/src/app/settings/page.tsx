@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { requireOnboarded } from "@/lib/auth/session";
-import { getGmailConnectionStatus } from "@/lib/gmail/credentials";
+import { getEmailConnectionStatus } from "@/lib/email/credentials";
 import { AppNav } from "@/components/app-nav";
-import { GmailConnectLink, SyncButton } from "@/components/gmail-sync";
+import {
+  EmailConnectForm,
+  EmailDisconnectButton,
+  SyncButton,
+} from "@/components/gmail-sync";
 
 export default async function SettingsPage({
   searchParams,
@@ -11,7 +15,7 @@ export default async function SettingsPage({
 }) {
   const params = await searchParams;
   const { user } = await requireOnboarded();
-  const connection = await getGmailConnectionStatus(user.id);
+  const connection = await getEmailConnectionStatus(user.id);
 
   return (
     <div className="mx-auto max-w-2xl space-y-8 p-8">
@@ -20,7 +24,7 @@ export default async function SettingsPage({
         <Link href="/" className="text-sm text-zinc-500 hover:underline">
           ← Inicio
         </Link>
-        <h1 className="text-2xl font-semibold">Gmail</h1>
+        <h1 className="text-2xl font-semibold">Correo bancario</h1>
       </header>
 
       {params.error && (
@@ -30,34 +34,32 @@ export default async function SettingsPage({
       )}
       {params.connected && (
         <p className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-300">
-          Gmail conectado correctamente.
+          Correo conectado correctamente.
         </p>
       )}
 
       <section className="space-y-4 rounded-lg border border-zinc-200 p-6 dark:border-zinc-800">
-        <h2 className="font-medium">Gmail</h2>
+        <h2 className="font-medium">IMAP (Gmail)</h2>
         {connection.connected ? (
           <div className="space-y-3 text-sm text-zinc-600 dark:text-zinc-400">
             <p>
-              Conectado
-              {connection.email ? `: ${connection.email}` : ""}
-              {connection.source === "env" ? " (token en .env)" : ""}
+              Conectado: {connection.email}
+              {connection.source === "env" ? " (credenciales en .env)" : ""}
             </p>
             <SyncButton />
+            {connection.source === "db" && <EmailDisconnectButton />}
             <p className="text-xs text-zinc-500">
-              Reenvía correos bancarios antiguos al buzón conectado; el parser
-              detecta forwards y usa la fecha del movimiento.
+              Reenvía correos bancarios antiguos al buzón; el parser detecta
+              forwards y usa la fecha del movimiento.
             </p>
           </div>
         ) : (
           <div className="space-y-3">
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Conecta tu cuenta Gmail dedicada para leer alertas bancarias.
+              Conecta el buzón Gmail dedicado con App Password (ADR-012). Sin
+              Google Cloud Console ni OAuth.
             </p>
-            <GmailConnectLink />
-            <p className="text-xs text-zinc-500">
-              Requiere GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en .env.local
-            </p>
+            <EmailConnectForm />
           </div>
         )}
       </section>

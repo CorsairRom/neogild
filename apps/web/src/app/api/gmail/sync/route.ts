@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
-import { runGmailSync } from '@neogild/gmail'
-import { getGmailOAuthForUser } from '@/lib/gmail/credentials'
+import {
+  createEmailClientForUser,
+  getImapCredentialsForUser,
+} from '@/lib/email/credentials'
+import { runEmailSync } from '@neogild/gmail'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -14,10 +17,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const oauth = await getGmailOAuthForUser(user.id)
-  if (!oauth) {
+  const imap = await getImapCredentialsForUser(user.id)
+  if (!imap) {
     return NextResponse.json(
-      { error: 'Gmail not connected. Configure OAuth in Settings or set GMAIL_REFRESH_TOKEN.' },
+      {
+        error:
+          'Email not connected. Add IMAP credentials in Settings or set GMAIL_USER + GMAIL_APP_PASSWORD.',
+      },
       { status: 400 },
     )
   }
@@ -35,10 +41,10 @@ export async function POST(request: Request) {
 
   try {
     const admin = createServiceClient()
-    const summary = await runGmailSync({
+    const summary = await runEmailSync({
       userId: user.id,
       since: since ?? undefined,
-      oauth,
+      client: createEmailClientForUser(imap),
       supabase: admin,
       mode: 'user',
     })
