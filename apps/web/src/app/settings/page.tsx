@@ -24,7 +24,7 @@ export default async function SettingsPage({
         <Link href="/" className="text-sm text-zinc-500 hover:underline">
           ← Inicio
         </Link>
-        <h1 className="text-2xl font-semibold">Correo bancario</h1>
+        <h1 className="text-2xl font-semibold">Configuración</h1>
       </header>
 
       {params.error && (
@@ -39,7 +39,7 @@ export default async function SettingsPage({
       )}
 
       <section className="space-y-4 rounded-lg border border-zinc-200 p-6 dark:border-zinc-800">
-        <h2 className="font-medium">IMAP (Gmail)</h2>
+        <h2 className="font-medium">Correo IMAP (Gmail)</h2>
         {connection.connected ? (
           <div className="space-y-3 text-sm text-zinc-600 dark:text-zinc-400">
             <p>
@@ -62,6 +62,21 @@ export default async function SettingsPage({
             <EmailConnectForm />
           </div>
         )}
+      </section>
+
+      <section className="rounded-lg border border-zinc-200 p-6 dark:border-zinc-800">
+        <h2 className="font-medium">Categorización (F2)</h2>
+        <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
+          <li>
+            <Link href="/settings/rules" className="underline">
+              Reglas keyword
+            </Link>
+          </li>
+          <li>
+            LLM: agrega <code className="text-xs">GOOGLE_GENERATIVE_AI_API_KEY</code> en{" "}
+            <code className="text-xs">apps/web/.env.local</code>
+          </li>
+        </ul>
       </section>
     </div>
   );

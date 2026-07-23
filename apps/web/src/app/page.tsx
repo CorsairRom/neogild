@@ -14,10 +14,11 @@ export default async function HomePage() {
     .from("transactions")
     .select("*", { count: "exact", head: true });
 
-  const { count: pendingCount } = await supabase
-    .from("email_movements")
+  const { count: reviewCount } = await supabase
+    .from("transactions")
     .select("*", { count: "exact", head: true })
-    .eq("status", "pending");
+    .or("category.is.null,needs_review.eq.true")
+    .in("type", ["income", "expense", "refund"]);
 
   const { count: errorCount } = await supabase
     .from("email_movements")
@@ -51,7 +52,7 @@ export default async function HomePage() {
 
       <section className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Transacciones" value={txCount ?? 0} />
-        <StatCard label="Correos pendientes" value={pendingCount ?? 0} />
+        <StatCard label="Por categorizar" value={reviewCount ?? 0} />
         <StatCard label="Errores de parseo" value={errorCount ?? 0} />
       </section>
 
@@ -65,8 +66,11 @@ export default async function HomePage() {
         {connection.connected ? (
           <div className="flex flex-wrap gap-3">
             <SyncButton />
-            <Link href="/inbox" className="text-sm underline text-zinc-600">
-              Ver correos →
+            <Link href="/transactions" className="text-sm underline text-zinc-600">
+              Ver transacciones →
+            </Link>
+            <Link href="/review" className="text-sm underline text-zinc-600">
+              Por categorizar →
             </Link>
           </div>
         ) : (

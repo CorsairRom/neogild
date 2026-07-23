@@ -6,6 +6,12 @@ export function AppNav() {
       <Link href="/" className="text-zinc-600 hover:underline dark:text-zinc-400">
         Inicio
       </Link>
+      <Link href="/transactions" className="text-zinc-600 hover:underline dark:text-zinc-400">
+        Transacciones
+      </Link>
+      <Link href="/review" className="text-zinc-600 hover:underline dark:text-zinc-400">
+        Por categorizar
+      </Link>
       <Link href="/inbox" className="text-zinc-600 hover:underline dark:text-zinc-400">
         Correos
       </Link>

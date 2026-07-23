@@ -12,6 +12,11 @@ type SyncSummary = {
   staged_errors?: number;
   pending?: number;
   failures?: string[];
+  categorize?: {
+    rule_matched?: number;
+    llm_matched?: number;
+    skipped_no_llm?: number;
+  };
 };
 
 function formatSyncSummary(data: SyncSummary): string {
@@ -30,6 +35,11 @@ function formatSyncSummary(data: SyncSummary): string {
   }
   if ((data.pending ?? 0) > 0) {
     parts.push(`${data.pending} pending (USD rate)`);
+  }
+  if (data.categorize) {
+    parts.push(
+      `cat rules ${data.categorize.rule_matched ?? 0}, llm ${data.categorize.llm_matched ?? 0}`,
+    );
   }
   return parts.join(", ");
 }

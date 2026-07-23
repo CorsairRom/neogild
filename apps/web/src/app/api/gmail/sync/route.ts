@@ -48,7 +48,11 @@ export async function POST(request: Request) {
       supabase: admin,
       mode: 'user',
     })
-    return NextResponse.json(summary)
+
+    const { runBatchCategorization } = await import('@/lib/categorization/pipeline')
+    const categorize = await runBatchCategorization(admin, user.id)
+
+    return NextResponse.json({ ...summary, categorize })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'sync failed'
     return NextResponse.json({ error: message }, { status: 502 })
