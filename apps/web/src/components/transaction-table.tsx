@@ -75,7 +75,13 @@ export function TransactionFilters({
   category: string;
   categories: Category[];
 }) {
-  const leafCategories = categories.filter((c) => c.parent_id !== null);
+  const leafCategories = categories.filter(
+    (c) =>
+      c.parent_id !== null &&
+      !c.id.startsWith("ingreso.") &&
+      !c.id.startsWith("spa.") &&
+      c.id !== "transfer",
+  );
 
   return (
     <form className="flex flex-wrap items-end gap-3" method="get">

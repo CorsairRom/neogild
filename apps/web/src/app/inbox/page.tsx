@@ -2,6 +2,8 @@ import { requireOnboarded } from "@/lib/auth/session";
 import { AppShell } from "@/components/app-shell";
 import { SyncButton } from "@/components/gmail-sync";
 
+export const dynamic = "force-dynamic";
+
 function formatCLP(amount: number | null) {
   if (amount == null) return "—";
   return new Intl.NumberFormat("es-CL", {

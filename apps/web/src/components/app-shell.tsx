@@ -40,9 +40,15 @@ export function AppShell({
               </form>
             </div>
           </div>
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-            <AppNav />
-            {actions}
+          <div className="mt-5 flex flex-col gap-4">
+            <div className="overflow-x-auto pb-1">
+              <AppNav />
+            </div>
+            {actions && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-800/80">
+                {actions}
+              </div>
+            )}
           </div>
         </header>
         {children}
@@ -81,6 +87,12 @@ export function StatCard({
     </div>
   );
 
-  if (href) return <Link href={href}>{inner}</Link>
+  if (href) {
+    return (
+      <Link href={href} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 rounded-xl">
+        {inner}
+      </Link>
+    );
+  }
   return inner;
 }

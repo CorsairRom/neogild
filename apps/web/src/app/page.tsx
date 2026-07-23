@@ -100,7 +100,14 @@ export default async function DashboardPage({
 
       <section className="mt-6 grid gap-4 lg:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 lg:col-span-2">
-          <h2 className="text-sm font-medium">Buckets del mes</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-medium">Buckets del mes</h2>
+            {buckets.por_categorizar > 0 && (
+              <Link href="/review" className="text-xs text-amber-600 underline">
+                Revisar {formatCLP(buckets.por_categorizar)}
+              </Link>
+            )}
+          </div>
           <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             <BucketItem label="Necesidades" value={buckets.necesidades} />
             <BucketItem label="Consumo" value={buckets.consumo} />

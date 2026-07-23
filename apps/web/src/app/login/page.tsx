@@ -35,13 +35,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <div className="w-full max-w-sm space-y-6">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--background)] p-4">
+      <div className="w-full max-w-sm space-y-6 rounded-xl border border-zinc-200 p-6 shadow-sm dark:border-zinc-800">
         <div className="text-center">
-          <h1 className="text-2xl font-semibold">Neogild</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Neogild</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
             {isSignUp ? "Crear cuenta" : "Iniciar sesión"}
-          </p>
+          </h1>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
