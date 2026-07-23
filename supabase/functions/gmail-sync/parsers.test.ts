@@ -112,6 +112,41 @@ Deno.test('bancochile_pago_tc uses Monto (not Utilizado) and card hint', () => {
   assertEquals(p.counterparty, 'TC Nacional')
 })
 
+Deno.test('bancochile_cargo_cuenta parses CC debit purchase (distinct from TC)', () => {
+  const p = parsed(email({
+    from: 'enviodigital@bancochile.cl',
+    subject: 'Cargo en Cuenta',
+    body: `Richard Alexis Romero Moore:
+Te informamos que se ha realizado una compra por $5.081 con cargo a Cuenta ****7210 en Spotify P44932218 el 14/07/2026 11:13.`,
+  }))
+  assertEquals(p.source, 'bancochile_cargo_cuenta')
+  assertEquals(p.amount, 5081)
+  assertEquals(p.merchant, 'Spotify P44932218')
+  assertEquals(p.account_hint, '7210')
+})
+
+Deno.test('bancochile_transfer_out short format (Transferencia a Terceros)', () => {
+  const p = parsed(email({
+    from: 'serviciodetransferencias@bancochile.cl',
+    subject: 'Transferencia a Terceros',
+    body: `Comprobante de Transferencia a terceros
+Origen
+Tipo de Cuenta Cuenta Corriente
+Nº de Cuenta 00-106-07072-10
+Destino
+Nombre y Apellido Richard Alexis Romero Moore
+Rut 18202300-0
+Monto $26.000
+Transacción
+TEFMBCO2607161915305475367710`,
+  }))
+  assertEquals(p.source, 'bancochile_transfer_out')
+  assertEquals(p.amount, 26000)
+  assertEquals(p.account_hint, '1060707210')
+  assertEquals(p.counterparty, 'Richard Alexis Romero Moore')
+  assertEquals(p.bank_tx_id, 'TEFMBCO2607161915305475367710')
+})
+
 Deno.test('bancochile_transfer_out parses prose format with origin account', () => {
   const p = parsed(email({
     from: 'serviciodetransferencias@bancochile.cl',

@@ -1,0 +1,47 @@
+# BancoEstado — Notificación de Cartola de CuentaRUT
+
+Remitente fijo: bancoestado@correo.bancoestado.cl
+Asunto fijo: Cartola de CuentaRUT
+
+IMPORTANTE: Este correo NO contiene transacciones en el cuerpo. Contiene un PDF adjunto
+encriptado. La contraseña son los últimos 4 dígitos del RUT (sin dígito verificador).
+
+Ej: RUT 18.202.300-0 → contraseña = 2300
+
+## Estrategia de procesamiento
+
+1. El parser DEBE detectar este tipo de correo (por remitente + asunto) y marcarlo
+   como `source: bancoestado_cartola` con `status: pending_attachment`.
+2. Descargar el adjunto PDF.
+3. Intentar desencriptar con los últimos 4 dígitos del RUT almacenado en el perfil
+   del usuario.
+4. Parsear el PDF con extracción de texto (si es PDF con texto) o con OCR + LLM
+   (si es escaneado).
+5. Alimentar las transacciones extraídas al statement reconciliation engine
+   (ADR-011).
+
+## Ejemplo real
+Asunto: Cartola de CuentaRUT
+Remitente: bancoestado@correo.bancoestado.cl
+---CUERPO---
+Estimado(a): ROMERO MOORE RICHARD ALEXIS
+ 
+Junto con saludarlo(a), adjuntamos cartola donde podrá conocer los saldos y movimientos
+de su CuentaRUT en BancoEstado. 
+ 
+Recuerde que siempre puede consultar el detalle de todas sus cartolas de movimientos y
+saldo a través de su App BancoEstado, o bien, desde "Banca en Línea" en
+www.bancoestado.cl.
+ 
+Para su mayor seguridad, esta información ha sido encriptada, y para abrirla, deberá
+ingresar como contraseña, los 4 últimos dígitos de su RUT, sin dígito verificador
+(Ejemplo: Rut 12.345.678-9 » 5678).
+---ESPERADO---
+{
+  "source": "bancoestado_cartola",
+  "has_attachment": true,
+  "attachment_encrypted": true,
+  "attachment_password_hint": "last_4_rut",
+  "status": "pending_attachment",
+  "entry_type": "statement"
+}

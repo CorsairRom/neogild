@@ -1,0 +1,90 @@
+# Banco de Chile — Transferencia a Terceros (formato largo / detallado)
+
+Remitente fijo: serviciodetransferencias@bancochile.cl
+Asunto: Transferencias de Fondos a [nombre del destinatario]
+
+Notas:
+- Este es el formato MÁS detallado. Incluye secciones "Datos del Destinatario" y
+  "Datos de la Transferencia" con todos los campos explícitos.
+- A diferencia del formato corto (transferencia-out.txt), este incluye:
+  - Número de cuenta del destino normalizado (sin guiones)
+  - ID de transacción TEF_IPE... (distinto prefijo al TEFMBCO del formato corto)
+  - Mail del destinatario
+- La cuenta origen viene sin guiones: "1060707210" (no "00-106-07072-10")
+- Este formato YA existe en Balance como `bancochile_transfer_out` (parsers.ts).
+  Es el formato legacy que Balance ya sabe parsear.
+- El destinatario es una cuenta en Banco Falabella, posiblemente cuenta de inversión
+  (Fintoc).
+
+## Ejemplo real: $479.140 a Banco Falabella
+Asunto: Transferencias de Fondos a Richard Alexis Romero Moore
+Remitente: serviciodetransferencias@bancochile.cl
+---CUERPO---
+Estimado(a) Richard Alexis Romero Moore
+
+Le informamos que usted ha efectuado una transferencia de fondos a Richard Alexis
+Romero Moore, el día 06 de julio de 2026, desde su Cuenta Corriente 1060707210.
+El detalle puede revisarlo a continuación
+
+	
+DESDE HOY PUEDES AUTORIZAR TUS TRANSFERENCIAS EN TU CELULAR CON LA APLICACION
+MI PASS EN VEZ DE DIGIPASS Y AHORRA TIEMPO.
+DESCARGA MI PASS DESDE GOOGLE PLAY O APPLE STORE.
+
+Datos del Destinatario	
+Nombre	Richard Alexis Romero Moore	
+Rut	18.202.300-0	
+Cuenta	999999108109495567	
+Banco	Banco Falabella	
+Mail	transferencias@fintoc.com	
+
+Datos de la Transferencia	
+Fecha	06/07/2026	
+Cuenta	1060707210	
+Monto	$479.140	
+ID	TEF_IPE2607061454305282003080	
+Mensaje	
+1FIN-pi_3G8rOb50X2cVcTFIKguR0uteB6k	
+
+alerta	
+Sigue estos consejos para evitar fraudes:
+- Nunca te llamaremos solicitando tus claves o información personal.
+- Nunca hagas clic en links ni descargues archivos adjuntos de correos sospechosos.
+- Ingresa al Banco digitando la dirección en tu navegador.
+
+Realiza todo de forma ágil usando estas aplicaciones*
+Mi Banco | Mi Pass | Mi Inversión
+Encuéntranos en Facebook, X (@AyudaBancoChile), Instagram (@Bancodechile)
+Banca Telefonica 600 637 3737
+---ESPERADO---
+{
+  "amount": 479140,
+  "counterparty": "Richard Alexis Romero Moore",
+  "counterparty_rut": "18.202.300-0",
+  "counterparty_bank": "Banco Falabella",
+  "counterparty_account": "999999108109495567",
+  "counterparty_email": "transferencias@fintoc.com",
+  "date": "2026-07-06",
+  "time": null,
+  "account_hint": "1060707210",
+  "account_product": "Cuenta Corriente",
+  "bank_tx_id": "TEF_IPE2607061454305282003080",
+  "source": "bancochile_transfer_out_detalle",
+  "entry_type": "transfer_out",
+  "message": "1FIN-pi_3G8rOb50X2cVcTFIKguR0uteB6k"
+}
+---PATRON_REGEX---
+(Formato de secciones con campos clave-valor)
+Datos del Destinatario[\s\S]*?
+Nombre\s+(.+?)\s*$
+Rut\s+([\d.]+-[\dkK])
+Cuenta\s+(\d+)
+Banco\s+(.+?)\s*$
+Mail\s+(.+?)\s*$
+
+Datos de la Transferencia[\s\S]*?
+Fecha\s+(\d{2}/\d{2}/\d{4})
+Cuenta\s+(\d+)
+Monto\s+\$([\d.]+)
+ID\s+(TEF_\w+)
+Mensaje\s+(.+?)(?:\n\n|\n\w)

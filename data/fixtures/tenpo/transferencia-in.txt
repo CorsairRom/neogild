@@ -1,0 +1,63 @@
+# Tenpo — Transferencia Recibida
+
+Remitente fijo: no-reply@tenpo.cl
+Asunto fijo: Comprobante de transferencia - Tenpo
+
+Notas:
+- Este correo confirma que ALGUIEN te transfirió plata a tu cuenta Tenpo.
+- Es un ingreso (entry_type: income).
+- La cuenta de destino mencionada en el cuerpo es la del REMITENTE (quien envía),
+  NO tu cuenta Tenpo. El texto "a tu cuenta" confirma que llegó a vos.
+- El código de transferencia es único.
+- Tenpo también envía correos desde paratodos@tenpo.cl (marketing) → ignorar.
+
+## Ejemplo real
+Asunto: Comprobante de transferencia - Tenpo
+Remitente: no-reply@tenpo.cl
+---CUERPO---
+Comprobante de transferencia exitosa
+La transferencia de YALEY DE FATIMA MERINO CONTRERAS por $20.000 a tu cuenta fue exitosa.
+
+Monto transferencia:	$ 20.000
+Nombre del destinatario:	YALEY DE FATIMA MERINO CONTRERAS
+Banco de destino:	BANCO ESTADO
+Nº cuenta de destino:	18202300
+RUT:	18.202.300-0
+Fecha:	17-07-2026
+Mensaje:	
+Hora:	19:54:57
+Código de transferencia:	000083581776
+
+Tu saldo puede tardar unos minutos en reflejarse. Puedes verificar en tu cuenta Tenpo
+en el "Historial de movimientos"
+
+Comprometidos con tu seguridad
+Solo te enviaremos correos electrónicos con links desde paratodos@tenpo.cl
+Nunca te enviaremos correos electrónicos, SMS o llamaremos solicitando tus datos
+personales, ni claves.
+Siempre verifica el remitente de los correos. Los comunicados entre Tenpo y sus
+clientes siempre serán desde no-reply@tenpo.cl
+---ESPERADO---
+{
+  "amount": 20000,
+  "counterparty": "YALEY DE FATIMA MERINO CONTRERAS",
+  "counterparty_rut": "18.202.300-0",
+  "counterparty_bank": "BANCO ESTADO",
+  "counterparty_account": "18202300",
+  "date": "2026-07-17",
+  "time": "19:54:57",
+  "bank_tx_id": "TENPO_000083581776",
+  "source": "tenpo_transfer_in",
+  "entry_type": "income",
+  "account_hint": "tenpo"
+}
+---PATRON_REGEX---
+(La estructura es tabla de campos clave-valor, no texto corrido)
+Monto transferencia:\s*\$ ([\d.,]+)
+Nombre del destinatario:\s*(.+)
+Banco de destino:\s*(.+)
+Nº cuenta de destino:\s*(\d+)
+RUT:\s*([\d.]+-[\dkK])
+Fecha:\s*(\d{2}-\d{2}-\d{4})
+Hora:\s*(\d{2}:\d{2}:\d{2})
+Código de transferencia:\s*(\d+)

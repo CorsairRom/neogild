@@ -1,0 +1,123 @@
+# Banco de Chile — Transferencia a Terceros (formato corto)
+
+Remitente fijo: serviciodetransferencias@bancochile.cl
+Asunto fijo: Transferencia a Terceros
+
+Notas:
+- Formato con tabla de campos clave-valor. Más estructurado que el TEF de BancoEstado.
+- El origen es Cuenta Corriente, el destino puede ser cualquier banco.
+- El número de cuenta viene con guiones (00-106-07072-10). Hay que normalizarlo.
+- La fecha/hora viene en formato "jueves 16 de julio de 2026 19:16" (texto, no numérico).
+- El ID de transacción (TEFMBCO...) es único.
+- Este formato es DISTINTO al parser bancochile_transfer_out de Balance, que usa el
+  formato "Transferencias de Fondos a ..." (más detallado). Ambos formatos existen.
+  Este es el "corto", el otro es el "largo".
+
+## Ejemplo real 1: $26.000 a Banco Estado (cuenta propia)
+Asunto: Transferencia a Terceros
+Remitente: serviciodetransferencias@bancochile.cl
+---CUERPO---
+Comprobante de Transferencia a terceros
+Estimado(a): Richard Alexis Romero
+Te informamos que has realizado una Transferencia a terceros en forma exitosa con el
+siguiente detalle:
+
+Origen
+Tipo de Cuenta	Cuenta Corriente
+Nº de Cuenta	00-106-07072-10
+
+Destino
+Nombre y Apellido	Richard Alexis Romero Moore
+Rut	18202300-0
+Tipo de Cuenta	Cuenta Vista
+Nº de Cuenta	00-001-82023-00
+Banco	Banco Estado
+Email	
+
+Monto	$26.000
+Mensaje	
+
+Fecha y Hora:
+jueves 16 de julio de 2026 19:16
+
+Transacción
+TEFMBCO2607161915305475367710
+
+Si tienes dudas o consultas, puedes llamar a nuestra Banca Telefónica
+o también, dirigirte a cualquiera de nuestras sucursales.
+---ESPERADO---
+{
+  "amount": 26000,
+  "counterparty": "Richard Alexis Romero Moore",
+  "counterparty_rut": "18202300-0",
+  "counterparty_bank": "Banco Estado",
+  "counterparty_account": "00-001-82023-00",
+  "counterparty_account_normalized": "18202300",
+  "date": "2026-07-16",
+  "time": "19:16",
+  "account_hint": "1060707210",
+  "account_hint_normalized": "1060707210",
+  "account_product": "Cuenta Corriente",
+  "bank_tx_id": "TEFMBCO2607161915305475367710",
+  "source": "bancochile_transfer_out",
+  "entry_type": "transfer_out",
+  "is_own_account": true
+}
+---PATRON_REGEX---
+(Estructura de tabla clave-valor con tabs como separadores)
+Origen[\s\S]*?Nº de Cuenta\s+([\d-]+)
+Destino[\s\S]*?Nombre y Apellido\s+(.+?)\s*$
+Rut\s+([\d.]+-[\dkK])
+Tipo de Cuenta\s+(.+?)\s*$
+Nº de Cuenta\s+([\d-]+)
+Banco\s+(.+?)\s*$
+Monto\s+\$([\d.]+)
+Fecha y Hora:\s*\n(.+?)\n
+Transacción\s*\n(.+)
+
+## Ejemplo real 2: $180.000 a Banco Estado (cuenta propia)
+Asunto: Transferencia a Terceros
+Remitente: serviciodetransferencias@bancochile.cl
+---CUERPO---
+Comprobante de Transferencia a terceros
+Estimado(a): Richard Alexis Romero
+Te informamos que has realizado una Transferencia a terceros en forma exitosa con el
+siguiente detalle:
+
+Origen
+Tipo de Cuenta	Cuenta Corriente
+Nº de Cuenta	00-106-07072-10
+
+Destino
+Nombre y Apellido	Richard Alexis Romero Moore
+Rut	18202300-0
+Tipo de Cuenta	Cuenta Vista
+Nº de Cuenta	00-001-82023-00
+Banco	Banco Estado
+Email	
+
+Monto	$180.000
+Mensaje	
+
+Fecha y Hora:
+lunes 06 de julio de 2026 15:59
+
+Transacción
+TEFMBCO2607061559305283678540
+---ESPERADO---
+{
+  "amount": 180000,
+  "counterparty": "Richard Alexis Romero Moore",
+  "counterparty_rut": "18202300-0",
+  "counterparty_bank": "Banco Estado",
+  "counterparty_account": "00-001-82023-00",
+  "counterparty_account_normalized": "18202300",
+  "date": "2026-07-06",
+  "time": "15:59",
+  "account_hint": "1060707210",
+  "account_product": "Cuenta Corriente",
+  "bank_tx_id": "TEFMBCO2607061559305283678540",
+  "source": "bancochile_transfer_out",
+  "entry_type": "transfer_out",
+  "is_own_account": true
+}

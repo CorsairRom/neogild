@@ -1,0 +1,40 @@
+# Banco de Chile — Cartola Cuenta Corriente
+
+Remitente fijo: enviodigital@bancochile.cl
+Asunto fijo: Cartola Cuenta Corriente
+
+Notas:
+- PDF adjunto encriptado. Contraseña = últimos 4 dígitos del RUT (sin dígito verificador).
+- Mismo patrón que la cartola de BancoEstado: PDF encriptado con clave RUT.
+- Este correo NO contiene transacciones en el cuerpo. Solo la notificación del adjunto.
+
+## Ejemplo real
+Asunto: Cartola Cuenta Corriente
+Remitente: enviodigital@bancochile.cl
+---CUERPO---
+Richard Alexis Romero Moore: 
+ 
+Esta es tu Cartola Cuenta Corriente
+
+Adjunto a este mail enviamos tu Cartola de Cuenta Corriente. Por seguridad, para abrir
+el archivo deberás ingresar una clave que corresponde a los 4 últimos dígitos de tu Rut
+(sin dígito verificador).
+
+Con el objeto de contar con información que nos permita entregar un mejor servicio y
+conforme a la normativa de la Comisión para el Mercado Financiero, te recordamos que
+debes mantener actualizados los antecedentes personales y financieros registrados en
+el Banco. En caso que en alguno de ellos haya cambio, te agradeceremos llamar a Banca
+Telefónica o actualizar tus datos en Banco en Línea/Perfil/Estado de Situación.
+
+Realiza tus operaciones bancarias desde tu Smartphone de forma ágil y segura con
+nuestras Apps.
+---ESPERADO---
+{
+  "source": "bancochile_cartola_cc",
+  "has_attachment": true,
+  "attachment_encrypted": true,
+  "attachment_password_hint": "last_4_rut",
+  "status": "pending_attachment",
+  "entry_type": "statement",
+  "account_type": "cuenta_corriente"
+}

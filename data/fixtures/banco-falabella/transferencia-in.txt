@@ -1,0 +1,63 @@
+# Banco Falabella — Transferencia Recibida
+
+Remitente fijo: notificaciones@cl.bancofalabella.com
+Asunto fijo: Aviso de transferencia de fondos recibida
+
+Notas:
+- Este correo confirma que un cliente de Banco Falabella te transfirió plata.
+- Es un ingreso (entry_type: income).
+- La cuenta de destino es TU cuenta (en Banco Estado, en este caso).
+- El número de operación es único.
+- El remitente es "nuestro(a) cliente {nombre}", NO es tu nombre. 
+  El nombre que aparece es el del REMITENTE.
+
+## Ejemplo real
+Asunto: Aviso de transferencia de fondos recibida
+Remitente: notificaciones@cl.bancofalabella.com
+---CUERPO---
+Richard Romero
+
+Le informamos que hoy, 27-06-2026, nuestro(a) cliente YALEY DE FATIMA MERINO ha
+instruido una transferencia de fondos a su cuenta con el siguiente detalle:
+
+Detalle
+
+Banco de destino	Banco Estado
+Cuenta de destino	Cuenta Vista 18202300
+Rut destinatario	182023000
+Asunto	Transferencia realizada
+Monto transferencia	$100.000
+Fecha	27-06-2026
+Hora	09:23
+Número de operación	188248967174
+
+Consejos para evitar fraudes:
+Evita abrir y/o descargar archivos de remitentes desconocidos.
+Verifica siempre la URL de la página comience con https://.
+Accede a nuestro sitio web (bancofalabella.cl) digitando la dirección directamente
+en tu navegador.
+Nunca te enviaremos e-mail con link a nuestro sitio web. Descarga nuestra App
+Banco Falabella y activa/desactiva tus compras por Internet, retiros o compras
+en el extranjero.
+---ESPERADO---
+{
+  "amount": 100000,
+  "counterparty": "YALEY DE FATIMA MERINO",
+  "counterparty_bank": "Banco Falabella",
+  "account_hint": "18202300",
+  "account_destination": "Cuenta Vista 18202300",
+  "date": "2026-06-27",
+  "time": "09:23",
+  "bank_tx_id": "FALABELLA_188248967174",
+  "source": "bancofalabella_transfer_in",
+  "entry_type": "income"
+}
+---PATRON_REGEX---
+nuestro\(a\) cliente (.+?) ha instruido
+Banco de destino\s*(.+)
+Cuenta de destino\s*(.+?)\s*(\d+)
+Rut destinatario\s*(\d+)
+Monto transferencia\s*\$([\d.,]+)
+Fecha\s*(\d{2}-\d{2}-\d{4})
+Hora\s*(\d{2}:\d{2})
+Número de operación\s*(\d+)

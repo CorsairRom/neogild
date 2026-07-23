@@ -1,0 +1,111 @@
+# BancoEstado — Transferencia Electrónica Saliente (TEF Out)
+
+Remitente fijo: noreply@correo.bancoestado.cl
+Asunto fijo: Aviso de envío o recepción de dinero
+
+Notas:
+- El asunto NO distingue entre envío (saliente) y recepción (entrante). 
+  Hay que revisar el cuerpo: "Acabas de realizar" → saliente, "Has recibido" → entrante.
+- El formato es una tabla de campos clave-valor, no texto corrido.
+- El N° de TEF es el identificador único de la transacción.
+- El producto "CuentaRUT" indica que es desde una CuentaRUT de BancoEstado.
+
+## Ejemplo real 1: Transferencia a BCI/Mach
+Asunto: Aviso de envío o recepción de dinero
+Remitente: noreply@correo.bancoestado.cl
+---CUERPO---
+Comprobante de Transferencia Electronica de Fondos (TEF)	 
+ 	 	 
+	Estimado(a) RICHARD ALEXIS ROMERO MOORE	 
+Acabas de realizar una Transferencia Electronica, con los siguientes datos:
+Monto transferido: $10.000
+ 	 	 
+Desde:
+Producto	:	CuentaRUT
+N° de cuenta	:	00018202300
+N° de TEF	:	8025115
+Fecha y Hora de TEF	:	08/07/2026 15:51:54
+ 	 	 
+Hacia:
+Nombre	:	Juan Andres Maurelia
+RUT	:	16.155.479-0
+Banco	:	Bci/machbank
+N° de cuenta	:	27491871
+Producto	:	Cuenta Corriente
+E-mail	:	
+Comentario	:	
+---ESPERADO---
+{
+  "amount": 10000,
+  "counterparty": "Juan Andres Maurelia",
+  "counterparty_rut": "16.155.479-0",
+  "counterparty_bank": "Bci/machbank",
+  "counterparty_account": "27491871",
+  "date": "2026-07-08",
+  "time": "15:51:54",
+  "account_hint": "18202300",
+  "account_product": "CuentaRUT",
+  "bank_tx_id": "TEF_8025115",
+  "source": "bancoestado_transfer_out",
+  "entry_type": "transfer_out",
+  "comment": ""
+}
+---PATRON_REGEX---
+Monto transferido:\s*\$([\d.,]+).*?
+Producto\s*:\s*(.+?)\s*$
+N° de cuenta\s*:\s*(\d+)
+N° de TEF\s*:\s*(\d+)
+Fecha y Hora de TEF\s*:\s*(\d{2}/\d{2}/\d{4})\s*(\d{2}:\d{2}:\d{2})
+Nombre\s*:\s*(.+?)\s*$
+RUT\s*:\s*([\d.]+-[\dkK])
+Banco\s*:\s*(.+?)\s*$
+N° de cuenta\s*:\s*(\d+)
+
+## Ejemplo real 2: Transferencia a Tenpo
+Asunto: Aviso de envío o recepción de dinero
+Remitente: noreply@correo.bancoestado.cl
+---CUERPO---
+Comprobante de Transferencia Electronica de Fondos (TEF)	 
+ 	 	 
+	Estimado(a) RICHARD ALEXIS ROMERO MOORE	 
+Acabas de realizar una Transferencia Electronica, con los siguientes datos:
+Monto transferido: $16.000
+ 	 	 
+Desde:
+Producto	:	CuentaRUT
+N° de cuenta	:	00018202300
+N° de TEF	:	8044828
+Fecha y Hora de TEF	:	28/06/2026 12:28:23
+ 	 	 
+Hacia:
+Nombre	:	Miguel Angel Valenzuela Valenzuela
+RUT	:	18.415.158-8
+Banco	:	Prepago Tenpo
+N° de cuenta	:	111118415158
+Producto	:	Cuenta Vista
+E-mail	:	ninja01252601@gmail.com
+Comentario	:	Richard corte mas barba
+---ESPERADO---
+{
+  "amount": 16000,
+  "counterparty": "Miguel Angel Valenzuela Valenzuela",
+  "counterparty_rut": "18.415.158-8",
+  "counterparty_bank": "Prepago Tenpo",
+  "counterparty_account": "111118415158",
+  "date": "2026-06-28",
+  "time": "12:28:23",
+  "account_hint": "18202300",
+  "account_product": "CuentaRUT",
+  "bank_tx_id": "TEF_8044828",
+  "source": "bancoestado_transfer_out",
+  "entry_type": "transfer_out",
+  "comment": "Richard corte mas barba"
+}
+
+## Nota: Transferencia Entrante (RECEPCIÓN de dinero)
+
+El mismo remitente/asunto se usa para transferencias recibidas. 
+El cuerpo cambia: en vez de "Acabas de realizar", dice "Has recibido".
+Ejemplo conocido (no se proveyó texto exacto, documentar cuando llegue uno):
+  "Has recibido una Transferencia Electrónica, con los siguientes datos:"
+  Los campos son los mismos pero invertidos: Desde = remitente, Hacia = tu cuenta.

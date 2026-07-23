@@ -9,6 +9,9 @@ export const KNOWN_SENDERS = [
   'info@mercadopago.com',
   'no-reply@tenpo.cl',
   'contacto@bci.cl',
+  'notificaciones@correo.bancoestado.cl',
+  'noreply@correo.bancoestado.cl',
+  'notificaciones@cl.bancofalabella.com',
 ] as const
 
 export function buildGmailQuery(afterEpochSeconds: number): string {
@@ -18,9 +21,7 @@ export function buildGmailQuery(afterEpochSeconds: number): string {
 
 export function decodeBase64Url(data: string): string {
   const b64 = data.replace(/-/g, '+').replace(/_/g, '/')
-  const bin = atob(b64)
-  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0))
-  return new TextDecoder().decode(bytes)
+  return Buffer.from(b64, 'base64').toString('utf-8')
 }
 
 export interface GmailPayload {

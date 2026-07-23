@@ -1,0 +1,39 @@
+# Banco de Chile — Cargo en Cuenta (Compra Débito)
+
+Remitente fijo: enviodigital@bancochile.cl
+Asunto fijo: Cargo en Cuenta
+
+Notas:
+- Es una compra con tarjeta de débito asociada a una Cuenta Corriente.
+- El monto usa punto como separador de miles ($5.081). NO es decimal — CLP no tiene decimales.
+- El merchant aparece después de "en" y antes de "el" (fecha). Puede incluir un identificador
+  alfanumérico (ej: "Spotify P44932218").
+- Los últimos 4 dígitos de la cuenta aparecen con **** (****7210).
+- Este formato es distinto al "Compra con Tarjeta de Crédito" de Banco de Chile que ya existe
+  en Balance (bancochile_tc). Ese es para TC, este es para débito/cuenta corriente.
+- A diferencia del parser bancochile_tc de Balance, este NO distingue CLP vs USD porque
+  las compras con débito siempre son en CLP.
+
+## Ejemplo real
+Asunto: Cargo en Cuenta
+Remitente: enviodigital@bancochile.cl
+---CUERPO---
+Richard Alexis Romero Moore:
+Te informamos que se ha realizado una compra por $5.081 con cargo a Cuenta ****7210 en Spotify P44932218 el 14/07/2026 11:13.
+Revisa Saldos y Movimientos en App Mi Banco o Banco en Línea.
+
+
+ Más información 60‍0 63‍7 37‍37.
+---ESPERADO---
+{
+  "amount": 5081,
+  "merchant": "Spotify P44932218",
+  "date": "2026-07-14",
+  "time": "11:13",
+  "account_hint": "7210",
+  "source": "bancochile_cargo_cuenta",
+  "entry_type": "expense",
+  "card_type": "debito"
+}
+---PATRON_REGEX---
+se ha realizado una compra por \$([\d.]+) con cargo a Cuenta \*{4}(\d{4}) en (.+?) el (\d{2}/\d{2}/\d{4}) (\d{2}:\d{2})

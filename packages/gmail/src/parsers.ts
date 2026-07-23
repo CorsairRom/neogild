@@ -13,6 +13,7 @@ import { unwrapForward } from './forward'
 
 export type EmailSource =
   | 'bancochile_tc'
+  | 'bancochile_cargo_cuenta'
   | 'bancochile_pago'
   | 'bancochile_transfer_out'
   | 'bancochile_transfer_in'
@@ -23,6 +24,11 @@ export type EmailSource =
   | 'mp_transfer_out'
   | 'tenpo_transfer_in'
   | 'bci_spa'
+  | 'bancoestado_debito'
+  | 'bancoestado_transfer_out'
+  | 'bancoestado_transfer_in'
+  | 'bancoestado_cartola'
+  | 'bancofalabella_transfer_in'
 
 export interface RawEmail {
   id: string
@@ -145,6 +151,28 @@ function accountHint(text: string, re: RegExp = RE_ACCOUNT): string | null {
   return raw !== null ? normalizeAccountNumber(raw) : null
 }
 
+/** DD/MM/YYYY or DD-MM-YYYY (+ optional HH:MM[:SS]) from email body → ISO. */
+function bodyDateToIso(
+  datePart: string | null,
+  timePart: string | null | undefined,
+  fallback: string,
+): string {
+  if (!datePart) return fallback
+  const m = datePart.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/)
+  if (!m) return fallback
+  const [, d, mo, y] = m
+  const parts = (timePart ?? '12:00').replace(/[^\d:]/g, '').split(':')
+  const hh = parts[0]?.padStart(2, '0') ?? '12'
+  const mm = parts[1]?.padStart(2, '0') ?? '00'
+  const ss = parts[2]?.padStart(2, '0') ?? '00'
+  const parsed = new Date(`${y}-${mo}-${d}T${hh}:${mm}:${ss}.000Z`)
+  return Number.isNaN(parsed.getTime()) ? fallback : parsed.toISOString()
+}
+
+function normalizeBody(text: string): string {
+  return stripHtml(text).replace(/\s+/g, ' ')
+}
+
 // ---------------------------------------------------------------------------
 // Banco de Chile
 // ---------------------------------------------------------------------------
@@ -176,6 +204,26 @@ export function parseBancoChileTc(email: RawEmail): ParsedMovement | null {
   const amount = parseClpAmount(clpRaw)
   if (amount === null) return null
   return base(email, 'bancochile_tc', { amount, merchant, account_hint: card })
+}
+
+/**
+ * "Cargo en Cuenta": compra con débito en cuenta corriente (distinto de TC).
+ * "…compra por $5.081 con cargo a Cuenta ****7210 en Spotify … el 14/07/2026 11:13"
+ */
+export function parseBancoChileCargoCuenta(email: RawEmail): ParsedMovement | null {
+  const text = stripHtml(email.body)
+  const m = text.match(
+    /se ha realizado una compra por \$\s*([\d.]+) con cargo a Cuenta \*{4}(\d{4}) en (.+?) el (\d{2}\/\d{2}\/\d{4}) (\d{2}:\d{2})/i,
+  )
+  if (!m) return null
+  const amount = parseClpAmount(m[1])
+  if (amount === null) return null
+  return base(email, 'bancochile_cargo_cuenta', {
+    amount,
+    merchant: m[3].trim(),
+    account_hint: m[2],
+    email_date: bodyDateToIso(m[4], m[5], email.date),
+  })
 }
 
 /**
@@ -212,15 +260,20 @@ export function parseBancoChileTransferOut(email: RawEmail): ParsedMovement | nu
     amount,
     counterparty:
       matchGroup(text, /transferencia de fondos a\s+(.+?)[,.]?\s+el d[ií]a/i)
+      ?? matchGroup(text, /nombre y apellido\s+(.+?)(?=\s+rut\b)/i)
       ?? matchGroup(text, /(?:destinatario|nombre)\s*:?\s*([A-ZÁÉÍÓÚÑa-záéíóúñ ]{3,}?)(?=\s*(?:RUT|rut|banco|cuenta|monto|$))/i),
     account_hint:
-      accountHint(text, /desde su cuenta corriente\s*(?:n[^\d$]{0,15})?([\d-]{6,})/i)
+      accountHint(text, /origen[\s\S]*?n[°º]\s*de cuenta\s+([\d-]{6,})/i)
+      ?? accountHint(text, /desde su cuenta corriente\s*(?:n[^\d$]{0,15})?([\d-]{6,})/i)
       ?? accountHint(text, /cuenta\s+(?:de\s+)?origen[^\d$]{0,25}([\d-]{6,})/i)
       ?? accountHint(text),
-    // "Datos del Destinatario … Rut … Cuenta 5566778899 Banco …" — proves an
-    // own-account transfer when the number matches one of the user's accounts.
-    dest_hint: accountHint(text, /destinatario.{0,120}?rut\s*:?\s*[\d.kK-]+\s*cuenta\s*:?\s*([\d-]{4,})/i),
-    bank_tx_id: matchGroup(text, /\b(TEF_\w+)\b/),
+    dest_hint:
+      accountHint(text, /destino[\s\S]*?n[°º]\s*de cuenta\s+([\d-]{4,})/i)
+      ?? accountHint(text, /destinatario.{0,120}?rut\s*:?\s*[\d.kK-]+\s*cuenta\s*:?\s*([\d-]{4,})/i),
+    bank_tx_id:
+      matchGroup(text, /\b(TEF_IPE\w+)\b/)
+      ?? matchGroup(text, /\b(TEFMBCO\d+)\b/)
+      ?? matchGroup(text, /\b(TEF_\w+)\b/),
   })
 }
 
@@ -355,16 +408,28 @@ export function parseMpTransferOut(email: RawEmail): ParsedMovement | null {
  * Hint = destination account (where the money landed).
  */
 export function parseTenpoTransferIn(email: RawEmail): ParsedMovement | null {
-  const text = stripHtml(email.body)
+  const text = normalizeBody(email.body)
   const amountRaw = matchGroup(text, /monto transferencia:?\s*\$\s*([\d.,]+)/i)
     ?? matchGroup(text, RE_CLP)
   if (amountRaw === null) return null
   const amount = parseClpAmount(amountRaw)
   if (amount === null) return null
+
+  const counterparty =
+    matchGroup(text, /transferencia de\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]{3,}?)\s+por/i)
+    ?? matchGroup(text, /nombre del destinatario:\s*(.+?)(?:\s+banco|\s+rut|\s+fecha|$)/i)
+
+  const txCode = matchGroup(text, /c[óo]digo de transferencia:\s*(\d+)/i)
+  const fecha = matchGroup(text, /fecha:\s*(\d{2}-\d{2}-\d{4})/i)
+  const hora = matchGroup(text, /hora:\s*(\d{2}:\d{2}(?::\d{2})?)/i)
+
   return base(email, 'tenpo_transfer_in', {
     amount,
-    counterparty: matchGroup(text, /transferencia de\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ ]{3,}?)\s+por/i),
-    account_hint: accountHint(text, /cuenta de destino:?\s*([\d-]{6,})/i) ?? 'tenpo',
+    counterparty,
+    // Money lands in Tenpo; "cuenta de destino" in the email is the sender's bank account.
+    account_hint: 'tenpo',
+    email_date: bodyDateToIso(fecha, hora, email.date),
+    bank_tx_id: txCode !== null ? `TENPO_${txCode}` : null,
   })
 }
 
@@ -407,12 +472,96 @@ export function parseBciSpa(email: RawEmail): ParsedMovement | null {
 }
 
 // ---------------------------------------------------------------------------
+// BancoEstado / Banco Falabella (fixtures: data/fixtures/)
+// ---------------------------------------------------------------------------
+
+const RE_BE_DEBIT =
+  /se ha realizado (?:compra e-commerce|una compra) por \$ ([\d.,]+) en (.+?) asociado a su tarjeta de d[eé]bito terminada en \*{4} (\d{4}) el d[ií]a (\d{2}\/\d{2}\/\d{4}) a las (\d{2}:\d{2}) hrs/i
+
+/** notificaciones@correo.bancoestado.cl — compra con tarjeta de débito. */
+export function parseBancoEstadoDebito(email: RawEmail): ParsedMovement | null {
+  const text = normalizeBody(email.body)
+  const m = text.match(RE_BE_DEBIT)
+  if (!m) return null
+  const amount = parseClpAmount(m[1])
+  if (amount === null) return null
+  return base(email, 'bancoestado_debito', {
+    amount,
+    merchant: m[2].trim(),
+    account_hint: m[3],
+    email_date: bodyDateToIso(m[4], m[5], email.date),
+  })
+}
+
+/** noreply@correo.bancoestado.cl — TEF (saliente o entrante; mismo asunto). */
+export function parseBancoEstadoTransfer(email: RawEmail): ParsedMovement | null {
+  const text = normalizeBody(email.body)
+  const isOut = /acabas de realizar/i.test(text)
+  const isIn = /has recibido/i.test(text)
+  if (!isOut && !isIn) return null
+
+  const amountRaw = matchGroup(text, /monto transferido:\s*\$([\d.,]+)/i)
+  if (amountRaw === null) return null
+  const amount = parseClpAmount(amountRaw)
+  if (amount === null) return null
+
+  const section = isOut ? 'desde' : 'hacia'
+  const otherSection = isOut ? 'hacia' : 'desde'
+  const accountRe = new RegExp(
+    `${section}:.*?(?:n[°º] de cuenta\\s*:\\s*(\\d+))`,
+    'i',
+  )
+  const counterpartyRe = new RegExp(
+    `${otherSection}:.*?nombre\\s*:\\s*(.+?)\\s+rut\\s*:`,
+    'i',
+  )
+
+  const accountRaw = matchGroup(text, accountRe)
+  const tef = matchGroup(text, /n[°º] de tef\s*:\s*(\d+)/i)
+  const fecha = matchGroup(text, /fecha y hora de tef\s*:\s*(\d{2}\/\d{2}\/\d{4})/i)
+  const hora = matchGroup(text, /fecha y hora de tef\s*:\s*\d{2}\/\d{2}\/\d{4}\s*(\d{2}:\d{2}:\d{2})/i)
+
+  return base(email, isOut ? 'bancoestado_transfer_out' : 'bancoestado_transfer_in', {
+    amount,
+    counterparty: matchGroup(text, counterpartyRe),
+    account_hint: accountRaw !== null ? normalizeAccountNumber(accountRaw) : null,
+    email_date: bodyDateToIso(fecha, hora, email.date),
+    bank_tx_id: tef !== null ? `TEF_${tef}` : null,
+  })
+}
+
+/** notificaciones@cl.bancofalabella.com — transferencia recibida en cuenta de otro banco. */
+export function parseBancoFalabellaTransferIn(email: RawEmail): ParsedMovement | null {
+  const text = normalizeBody(email.body)
+  const amountRaw = matchGroup(text, /monto transferencia\s*\$([\d.,]+)/i)
+  if (amountRaw === null) return null
+  const amount = parseClpAmount(amountRaw)
+  if (amount === null) return null
+
+  const counterparty = matchGroup(text, /nuestro\(a\) cliente (.+?) ha instruido/i)
+  const accountRaw = matchGroup(text, /cuenta de destino\s*.+?(\d{6,})/i)
+  const fecha = matchGroup(text, /fecha\s*(\d{2}-\d{2}-\d{4})/i)
+  const hora = matchGroup(text, /hora\s*(\d{2}:\d{2})/i)
+  const op = matchGroup(text, /n[úu]mero de operaci[óo]n\s*(\d+)/i)
+
+  return base(email, 'bancofalabella_transfer_in', {
+    amount,
+    counterparty,
+    account_hint: accountRaw !== null ? normalizeAccountNumber(accountRaw) : null,
+    email_date: bodyDateToIso(fecha, hora, email.date),
+    bank_tx_id: op !== null ? `FALABELLA_${op}` : null,
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Dispatch
 // ---------------------------------------------------------------------------
 
 export function isNoise(email: RawEmail): boolean {
   const from = email.from.toLowerCase()
   if (NOISE_SENDERS.some((s) => from.includes(s))) return true
+  // BancoEstado cartola: PDF adjunto — F4 statement pipeline, not movement parse.
+  if (from.includes('bancoestado@correo.bancoestado.cl')) return true
   return NOISE_SUBJECTS.some((re) => re.test(email.subject))
 }
 
@@ -427,7 +576,9 @@ export function sourceForEmail(email: RawEmail): EmailSource | null {
   const subject = email.subject
 
   if (from.includes('enviodigital@bancochile.cl')) {
-    return /compra con tarjeta/i.test(subject) ? 'bancochile_tc' : null
+    if (/cargo en cuenta/i.test(subject)) return 'bancochile_cargo_cuenta'
+    if (/compra con tarjeta/i.test(subject)) return 'bancochile_tc'
+    return null
   }
   if (from.includes('serviciodetransferencias@bancochile.cl')) {
     if (/pago de tarjeta de cr[eé]dito/i.test(subject)) return 'bancochile_pago_tc'
@@ -453,6 +604,19 @@ export function sourceForEmail(email: RawEmail): EmailSource | null {
   if (from.includes('contacto@bci.cl')) {
     return /aviso de transferencia|transferencia se realiz[óo]/i.test(subject) ? 'bci_spa' : null
   }
+  if (from.includes('notificaciones@correo.bancoestado.cl')) {
+    return /notificaci[óo]n de compra/i.test(subject) ? 'bancoestado_debito' : null
+  }
+  if (from.includes('noreply@correo.bancoestado.cl')) {
+    return /aviso de env[ií]o o recepci[óo]n de dinero/i.test(subject)
+      ? 'bancoestado_transfer_out' // body distinguishes in/out
+      : null
+  }
+  if (from.includes('notificaciones@cl.bancofalabella.com')) {
+    return /transferencia de fondos recibida/i.test(subject)
+      ? 'bancofalabella_transfer_in'
+      : null
+  }
   return null
 }
 
@@ -476,6 +640,9 @@ function parseEmailInner(email: RawEmail): ParsedMovement | null | 'ignore' {
     'info@mercadopago.com',
     'no-reply@tenpo.cl',
     'contacto@bci.cl',
+    'notificaciones@correo.bancoestado.cl',
+    'noreply@correo.bancoestado.cl',
+    'notificaciones@cl.bancofalabella.com',
   ].some((s) => from.includes(s))
   if (!knownSender) return 'ignore'
 
@@ -485,6 +652,8 @@ function parseEmailInner(email: RawEmail): ParsedMovement | null | 'ignore' {
   switch (source) {
     case 'bancochile_tc':
       return parseBancoChileTc(email)
+    case 'bancochile_cargo_cuenta':
+      return parseBancoChileCargoCuenta(email)
     case 'bancochile_pago':
       return parseBancoChilePago(email)
     case 'bancochile_transfer_out':
@@ -505,5 +674,14 @@ function parseEmailInner(email: RawEmail): ParsedMovement | null | 'ignore' {
       return parseTenpoTransferIn(email)
     case 'bci_spa':
       return parseBciSpa(email)
+    case 'bancoestado_debito':
+      return parseBancoEstadoDebito(email)
+    case 'bancoestado_transfer_out':
+    case 'bancoestado_transfer_in':
+      return parseBancoEstadoTransfer(email)
+    case 'bancofalabella_transfer_in':
+      return parseBancoFalabellaTransferIn(email)
+    default:
+      return null
   }
 }

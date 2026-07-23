@@ -9,6 +9,9 @@ export const KNOWN_SENDERS = [
   'info@mercadopago.com',
   'no-reply@tenpo.cl',
   'contacto@bci.cl',
+  'notificaciones@correo.bancoestado.cl',
+  'noreply@correo.bancoestado.cl',
+  'notificaciones@cl.bancofalabella.com',
 ] as const
 
 export function buildGmailQuery(afterEpochSeconds: number): string {

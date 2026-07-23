@@ -1,0 +1,31 @@
+# BancoEstado — Compra con Tarjeta de Débito
+
+Remitente fijo: notificaciones@correo.bancoestado.cl
+Asunto fijo: Notificación de compra - BancoEstado
+
+## Variante 1: Compra física (presencial)
+
+### Ejemplo real 1
+Asunto: Notificación de compra - BancoEstado
+Remitente: notificaciones@correo.bancoestado.cl
+---CUERPO---
+RICHARD ALEXIS ROMERO
+
+Se ha realizado una compra por $ 21.388 en JUMBO MALL CENTRO CONC CONCEPCION CL asociado a su tarjeta de Débito terminada en **** 1958 el día 21/07/2026 a las 18:47 hrs.
+
+RICHARD ALEXIS ROMERO
+
+Se ha realizado una compra por $ 21.388 en JUMBO MALL CENTRO CONC CONCEPCION CL asociado a su tarjeta de Débito terminada en **** 1958 el día 21/07/2026 a las 18:47 hrs.
+---ESPERADO---
+{
+  "amount": 21388,
+  "merchant": "JUMBO MALL CENTRO CONC CONCEPCION CL",
+  "date": "2026-07-21",
+  "time": "18:47",
+  "account_hint": "1958",
+  "source": "bancoestado_debito",
+  "entry_type": "expense",
+  "card_type": "debito"
+}
+---PATRON_REGEX---
+Se ha realizado una compra por \$ ([\d.,]+) en (.+?) asociado a su tarjeta de Débito terminada en \*{4} (\d{4}) el día (\d{2}/\d{2}/\d{4}) a las (\d{2}:\d{2}) hrs\.
