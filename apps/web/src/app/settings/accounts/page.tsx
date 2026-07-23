@@ -79,9 +79,10 @@ export default function AccountsSettingsPage() {
         </ul>
       )}
 
-      <Link href="/onboard" className="text-sm underline text-zinc-600">
+      <Link href="/onboard" className="mt-6 inline-block text-sm underline text-zinc-600">
         Agregar cuentas (re-onboard manual en DB si ya onboarded)
       </Link>
+      </div>
     </div>
   );
 }
