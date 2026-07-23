@@ -1,8 +1,6 @@
 import { requireOnboarded } from "@/lib/auth/session";
-import { AppNav } from "@/components/app-nav";
+import { AppShell } from "@/components/app-shell";
 import { SyncButton } from "@/components/gmail-sync";
-
-export const dynamic = "force-dynamic";
 
 function formatCLP(amount: number | null) {
   if (amount == null) return "—";
@@ -30,7 +28,7 @@ function statusBadge(status: string) {
 }
 
 export default async function InboxPage() {
-  const { supabase } = await requireOnboarded();
+  const { supabase, user } = await requireOnboarded();
 
   const { data: movements } = await supabase
     .from("email_movements")
@@ -43,66 +41,52 @@ export default async function InboxPage() {
   const promoted = movements?.filter((m) => m.status === "promoted").length ?? 0;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-8">
-      <header className="space-y-3 border-b border-zinc-200 pb-6 dark:border-zinc-800">
-        <AppNav />
-        <h1 className="text-2xl font-semibold">Correos bancarios</h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Staging de ingesta: {pending} pendientes, {errors} con error
-          {promoted > 0 ? `, ${promoted} promovidos` : ""}.
-          {errors > 0 && (
-            <>
-              {" "}
-              Si ves «no account matches hint», revisa los últimos 4 dígitos en{" "}
-              <a href="/settings/accounts" className="underline">
-                Cuentas
-              </a>
-              .
-            </>
-          )}
-        </p>
-        <SyncButton />
-      </header>
+    <AppShell
+      userEmail={user.email ?? ""}
+      title="Correos bancarios"
+      description={`Staging: ${pending} pendientes, ${errors} errores${promoted > 0 ? `, ${promoted} promovidos` : ""}.`}
+    >
+      <SyncButton />
 
-      <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="mt-6 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <table className="w-full min-w-[640px] text-left text-sm">
+          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/80">
             <tr>
-              <th className="px-3 py-2 font-medium">Estado</th>
-              <th className="px-3 py-2 font-medium">Fecha</th>
-              <th className="px-3 py-2 font-medium">Fuente</th>
-              <th className="px-3 py-2 font-medium">Merchant</th>
-              <th className="px-3 py-2 font-medium">Monto</th>
-              <th className="px-3 py-2 font-medium">Detalle</th>
+              <th className="px-4 py-3 font-medium">Estado</th>
+              <th className="px-4 py-3 font-medium">Fecha</th>
+              <th className="px-4 py-3 font-medium">Fuente</th>
+              <th className="px-4 py-3 font-medium">Merchant</th>
+              <th className="px-4 py-3 font-medium text-right">Monto</th>
+              <th className="px-4 py-3 font-medium">Detalle</th>
             </tr>
           </thead>
           <tbody>
             {(movements ?? []).length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-zinc-500">
-                  Sin correos aún. Conecta IMAP en Configuración y ejecuta sync.
+                <td colSpan={6} className="px-4 py-12 text-center text-zinc-500">
+                  Sin correos. Conectá IMAP y ejecutá sync desde el dashboard.
                 </td>
               </tr>
             ) : (
               movements!.map((m) => (
                 <tr
                   key={m.id}
-                  className="border-b border-zinc-100 dark:border-zinc-800"
+                  className="border-b border-zinc-100 dark:border-zinc-800/80"
                 >
-                  <td className="px-3 py-2">{statusBadge(m.status)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">
+                  <td className="px-4 py-3">{statusBadge(m.status)}</td>
+                  <td className="whitespace-nowrap px-4 py-3">
                     {m.email_date
                       ? new Date(m.email_date).toLocaleDateString("es-CL")
                       : "—"}
                   </td>
-                  <td className="px-3 py-2 font-mono text-xs">{m.source}</td>
-                  <td className="px-3 py-2">{m.merchant ?? m.counterparty ?? "—"}</td>
-                  <td className="px-3 py-2 tabular-nums">
-                    {m.currency === "USD" && m.amount != null
-                      ? `US$${(m.amount / 100).toFixed(2)}`
-                      : formatCLP(m.amount)}
+                  <td className="px-4 py-3 font-mono text-xs">{m.source}</td>
+                  <td className="max-w-[12rem] truncate px-4 py-3">
+                    {m.merchant ?? m.counterparty ?? "—"}
                   </td>
-                  <td className="max-w-xs truncate px-3 py-2 text-xs text-zinc-500">
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {formatCLP(m.amount)}
+                  </td>
+                  <td className="max-w-xs truncate px-4 py-3 text-xs text-zinc-500">
                     {m.status === "error" && m.error_detail ? (
                       <span className="text-red-600 dark:text-red-400">{m.error_detail}</span>
                     ) : (
@@ -115,6 +99,6 @@ export default async function InboxPage() {
           </tbody>
         </table>
       </div>
-    </div>
+    </AppShell>
   );
 }

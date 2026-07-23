@@ -36,6 +36,16 @@ export {
   CONFIDENCE_AUTO,
 } from './categorize'
 export type { GmailSyncSummary } from './sync'
+export {
+  getCategoryBreakdown,
+  getDailyExpenses,
+  getMonthlyTrend,
+  currentMonthIso,
+  parseMonthParam,
+  shiftMonth,
+  monthLabel,
+} from './dashboard'
+export type { CategorySlice, DailySpend, TrendPoint } from './dashboard'
 export { triggerGmailSync } from './sync'
 export {
   getRecurringStatus,

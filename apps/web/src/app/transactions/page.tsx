@@ -1,87 +1,98 @@
 import Link from "next/link";
 import { requireOnboarded } from "@/lib/auth/session";
-import { AppNav } from "@/components/app-nav";
-import { getCategories, getTransactions } from "@neogild/core";
+import { AppShell } from "@/components/app-shell";
+import {
+  TransactionCategorySelect,
+  TransactionFilters,
+} from "@/components/transaction-table";
+import { formatCLP } from "@/lib/format";
+import { getCategories, getTransactions, parseMonthParam } from "@neogild/core";
 
 export const dynamic = "force-dynamic";
 
-function formatCLP(amount: number) {
-  return new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  }).format(Math.abs(amount));
-}
+export default async function TransactionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string; category?: string }>;
+}) {
+  const params = await searchParams;
+  const month = parseMonthParam(params.month);
+  const categoryFilter = params.category ?? "";
+  const { supabase, user } = await requireOnboarded();
 
-export default async function TransactionsPage() {
-  const { supabase } = await requireOnboarded();
-  const [transactions, categories] = await Promise.all([
-    getTransactions(supabase, { limit: 100 }),
-    getCategories(supabase, { entity: "personal" }),
-  ]);
-
-  const categoryNames = new Map(categories.map((c) => [c.id, c.name]));
+  const categories = await getCategories(supabase, { entity: "personal" });
+  const transactions = await getTransactions(supabase, {
+    month,
+    category: categoryFilter || undefined,
+    limit: 100,
+    types: ["income", "expense", "refund"],
+  });
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-8">
-      <header className="space-y-3 border-b border-zinc-200 pb-6 dark:border-zinc-800">
-        <AppNav />
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-2xl font-semibold">Transacciones</h1>
-          <Link href="/review" className="text-sm underline text-zinc-600">
-            Por categorizar →
-          </Link>
-        </div>
-      </header>
+    <AppShell
+      userEmail={user.email ?? ""}
+      title="Transacciones"
+      description="Ledger filtrable por mes y categoría. Editá la categoría inline."
+    >
+      <TransactionFilters month={month} category={categoryFilter} categories={categories} />
 
-      <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="mt-6 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <table className="w-full min-w-[640px] text-left text-sm">
+          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/80">
             <tr>
-              <th className="px-3 py-2 font-medium">Fecha</th>
-              <th className="px-3 py-2 font-medium">Descripción</th>
-              <th className="px-3 py-2 font-medium">Monto</th>
-              <th className="px-3 py-2 font-medium">Categoría</th>
-              <th className="px-3 py-2 font-medium">Tipo</th>
+              <th className="px-4 py-3 font-medium">Fecha</th>
+              <th className="px-4 py-3 font-medium">Descripción</th>
+              <th className="px-4 py-3 font-medium text-right">Monto</th>
+              <th className="px-4 py-3 font-medium">Categoría</th>
+              <th className="px-4 py-3 font-medium">Tipo</th>
             </tr>
           </thead>
           <tbody>
             {transactions.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-zinc-500">
-                  Sin transacciones. Sync correos en Inicio.
+                <td colSpan={5} className="px-4 py-12 text-center text-zinc-500">
+                  Sin transacciones para este filtro.{" "}
+                  <Link href="/" className="underline">
+                    Volver al dashboard
+                  </Link>
                 </td>
               </tr>
             ) : (
               transactions.map((tx) => (
                 <tr
                   key={tx.id}
-                  className="border-b border-zinc-100 dark:border-zinc-800"
+                  className="border-b border-zinc-100 dark:border-zinc-800/80"
                 >
-                  <td className="px-3 py-2 whitespace-nowrap">
+                  <td className="whitespace-nowrap px-4 py-3 text-zinc-600 dark:text-zinc-400">
                     {new Date(tx.date).toLocaleDateString("es-CL")}
                   </td>
-                  <td className="px-3 py-2">{tx.description ?? "—"}</td>
-                  <td className="px-3 py-2 tabular-nums">{formatCLP(tx.amount)}</td>
-                  <td className="px-3 py-2">
-                    {tx.category ? (
-                      categoryNames.get(tx.category) ?? tx.category
-                    ) : (
-                      <Link href="/review" className="text-amber-600 underline">
-                        pendiente
-                      </Link>
-                    )}
-                    {tx.needs_review && tx.category && (
-                      <span className="ml-1 text-xs text-amber-600">· revisar</span>
-                    )}
+                  <td className="max-w-xs truncate px-4 py-3">{tx.description ?? "—"}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    <span
+                      className={
+                        tx.type === "income"
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : ""
+                      }
+                    >
+                      {formatCLP(tx.amount, { signed: tx.type === "income" })}
+                    </span>
                   </td>
-                  <td className="px-3 py-2 text-xs text-zinc-500">{tx.type}</td>
+                  <td className="px-4 py-3">
+                    <TransactionCategorySelect
+                      transactionId={tx.id}
+                      currentCategory={tx.category}
+                      categories={categories}
+                      needsReview={tx.needs_review}
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-zinc-500">{tx.type}</td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
       </div>
-    </div>
+    </AppShell>
   );
 }

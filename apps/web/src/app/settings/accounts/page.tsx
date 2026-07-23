@@ -27,14 +27,18 @@ export default function AccountsSettingsPage() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-8">
-      <header className="space-y-3">
-        <AppNav />
-        <h1 className="text-2xl font-semibold">Cuentas bancarias</h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Hints que usa el matcher al promover correos → transacciones.
-        </p>
-      </header>
+    <div className="min-h-screen bg-[var(--background)]">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
+        <header className="mb-8 space-y-3 border-b border-zinc-200 pb-6 dark:border-zinc-800">
+          <AppNav />
+          <Link href="/settings" className="text-sm text-zinc-500 hover:underline">
+            ← Configuración
+          </Link>
+          <h1 className="text-2xl font-semibold">Cuentas bancarias</h1>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            Hints que usa el matcher al promover correos → transacciones.
+          </p>
+        </header>
 
       {loading ? (
         <p className="text-sm text-zinc-500">Cargando…</p>

@@ -1,103 +1,158 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { requireOnboarded } from "@/lib/auth/session";
 import { getEmailConnectionStatus } from "@/lib/email/credentials";
-import { AppNav } from "@/components/app-nav";
+import { AppShell, StatCard } from "@/components/app-shell";
+import { MonthNav } from "@/components/dashboard/month-nav";
+import {
+  CategoryPieChart,
+  DailyBarChart,
+  TrendLineChart,
+} from "@/components/dashboard/charts";
 import { SyncButton } from "@/components/gmail-sync";
+import { formatCLP, formatMonthTitle } from "@/lib/format";
+import {
+  getCategories,
+  getCategoryBreakdown,
+  getDailyExpenses,
+  getMonthlyBuckets,
+  getMonthlyTrend,
+  parseMonthParam,
+} from "@neogild/core";
 
 export const dynamic = "force-dynamic";
 
-export default async function HomePage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string }>;
+}) {
+  const params = await searchParams;
+  const month = parseMonthParam(params.month);
   const { supabase, user } = await requireOnboarded();
   const connection = await getEmailConnectionStatus(user.id);
 
-  const { count: txCount } = await supabase
-    .from("transactions")
-    .select("*", { count: "exact", head: true });
+  const categories = await getCategories(supabase, { entity: "personal" });
+  const categoryLabels = new Map(categories.map((c) => [c.id, c.name]));
 
-  const { count: reviewCount } = await supabase
-    .from("transactions")
-    .select("*", { count: "exact", head: true })
-    .or("category.is.null,needs_review.eq.true")
-    .in("type", ["income", "expense", "refund"]);
+  const [buckets, breakdown, daily, trend, reviewResult, syncResult] = await Promise.all([
+    getMonthlyBuckets(supabase, { month }),
+    getCategoryBreakdown(supabase, month, categoryLabels),
+    getDailyExpenses(supabase, month),
+    getMonthlyTrend(supabase, month, 6),
+    supabase
+      .from("transactions")
+      .select("*", { count: "exact", head: true })
+      .or("category.is.null,needs_review.eq.true")
+      .in("type", ["income", "expense", "refund"]),
+    supabase.from("sync_state").select("gmail_watermark").maybeSingle(),
+  ]);
 
-  const { count: errorCount } = await supabase
-    .from("email_movements")
-    .select("*", { count: "exact", head: true })
-    .eq("status", "error");
+  const reviewCount = reviewResult.count ?? 0;
+  const syncState = syncResult.data;
 
-  const { data: syncState } = await supabase
-    .from("sync_state")
-    .select("gmail_watermark, updated_at")
-    .maybeSingle();
+  const gastos =
+    buckets.necesidades + buckets.consumo + buckets.ahorro + buckets.por_categorizar;
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 p-8">
-      <header className="space-y-4 border-b border-zinc-200 pb-6 dark:border-zinc-800">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Neogild</h1>
-            <p className="text-sm text-zinc-500">{user.email}</p>
-          </div>
-          <form action="/auth/signout" method="post">
-            <button
-              type="submit"
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
-            >
-              Salir
-            </button>
-          </form>
+    <AppShell
+      userEmail={user.email ?? ""}
+      title={formatMonthTitle(month)}
+      description="Distribución de gastos, tendencia y sync de correos."
+      actions={
+        <Suspense fallback={<span className="text-sm text-zinc-500">…</span>}>
+          <MonthNav month={month} />
+        </Suspense>
+      }
+    >
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Ingresos" value={formatCLP(buckets.income)} tone="positive" />
+        <StatCard label="Gastos" value={formatCLP(gastos)} />
+        <StatCard
+          label="Disponible"
+          value={formatCLP(buckets.disponible, { signed: true })}
+          hint="Ingresos − gastos del mes"
+        />
+        <StatCard
+          label="Por categorizar"
+          value={String(reviewCount)}
+          tone={reviewCount > 0 ? "warn" : "default"}
+          href="/review"
+          hint={reviewCount > 0 ? "Revisar transacciones" : undefined}
+        />
+      </section>
+
+      <section className="mt-8 grid gap-6 lg:grid-cols-2">
+        <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+          <h2 className="mb-4 text-sm font-medium">Gastos por categoría</h2>
+          <CategoryPieChart data={breakdown} />
         </div>
-        <AppNav />
-      </header>
-
-      <section className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Transacciones" value={txCount ?? 0} />
-        <StatCard label="Por categorizar" value={reviewCount ?? 0} />
-        <StatCard label="Errores de parseo" value={errorCount ?? 0} />
+        <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+          <h2 className="mb-4 text-sm font-medium">Gasto diario</h2>
+          <DailyBarChart data={daily} />
+        </div>
       </section>
 
-      <section className="rounded-lg border border-zinc-200 p-6 dark:border-zinc-800">
-        <h2 className="mb-2 font-medium">Sync correos</h2>
-        <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-          {connection.connected
-            ? `Conectado${connection.email ? `: ${connection.email}` : ""}. Último watermark: ${syncState?.gmail_watermark ? new Date(syncState.gmail_watermark).toLocaleString("es-CL") : "nunca"}.`
-            : "Conecta IMAP en Configuración."}
-        </p>
-        {connection.connected ? (
-          <div className="flex flex-wrap gap-3">
-            <SyncButton />
-            <Link href="/transactions" className="text-sm underline text-zinc-600">
-              Ver transacciones →
+      <section className="mt-6 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+        <h2 className="mb-4 text-sm font-medium">Tendencia (6 meses)</h2>
+        <TrendLineChart data={trend} />
+      </section>
+
+      <section className="mt-6 grid gap-4 lg:grid-cols-3">
+        <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 lg:col-span-2">
+          <h2 className="text-sm font-medium">Buckets del mes</h2>
+          <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            <BucketItem label="Necesidades" value={buckets.necesidades} />
+            <BucketItem label="Consumo" value={buckets.consumo} />
+            <BucketItem label="Ahorro" value={buckets.ahorro} />
+            <BucketItem label="Sin categoría" value={buckets.por_categorizar} warn />
+          </dl>
+        </div>
+        <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+          <h2 className="text-sm font-medium">Sync correos</h2>
+          <p className="mt-2 text-xs text-zinc-500">
+            {connection.connected
+              ? `Conectado${connection.email ? `: ${connection.email}` : ""}`
+              : "IMAP no conectado"}
+          </p>
+          {connection.connected ? (
+            <div className="mt-3 space-y-2">
+              <SyncButton />
+              {syncState?.gmail_watermark && (
+                <p className="text-xs text-zinc-500">
+                  Último sync:{" "}
+                  {new Date(syncState.gmail_watermark).toLocaleString("es-CL")}
+                </p>
+              )}
+            </div>
+          ) : (
+            <Link href="/settings" className="mt-3 inline-block text-sm underline">
+              Configurar correo
             </Link>
-            <Link href="/review" className="text-sm underline text-zinc-600">
-              Por categorizar →
-            </Link>
-          </div>
-        ) : (
-          <Link href="/settings" className="text-sm underline">
-            Ir a configuración de correo
-          </Link>
-        )}
+          )}
+        </div>
       </section>
-
-      <section className="rounded-lg border border-dashed border-zinc-300 p-4 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
-        <p className="font-medium text-zinc-800 dark:text-zinc-200">Checklist F1</p>
-        <ul className="mt-2 list-inside list-disc space-y-1">
-          <li>Cuentas con ****1234 o número de cuenta configuradas</li>
-          <li>Correo IMAP conectado (App Password)</li>
-          <li>Sync → transacciones visibles arriba</li>
-          <li>Reenvíos históricos → inbox sin duplicar</li>
-        </ul>
-      </section>
-    </div>
+    </AppShell>
   );
 }
 
-function StatCard({ label, value }: { label: string; value: number }) {
+function BucketItem({
+  label,
+  value,
+  warn,
+}: {
+  label: string;
+  value: number;
+  warn?: boolean;
+}) {
   return (
-    <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-      <p className="text-sm text-zinc-500">{label}</p>
-      <p className="mt-1 text-3xl font-semibold tabular-nums">{value}</p>
+    <div>
+      <dt className="text-xs text-zinc-500">{label}</dt>
+      <dd
+        className={`mt-0.5 font-medium tabular-nums ${warn && value > 0 ? "text-amber-600 dark:text-amber-400" : ""}`}
+      >
+        {formatCLP(value)}
+      </dd>
     </div>
   );
 }
