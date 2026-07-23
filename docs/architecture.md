@@ -177,6 +177,7 @@ CLI `bal` completa → post-MVP P3.
 | [009](./decisions/009-feedback-learning.md) | Aprendizaje por feedback | MVP |
 | [010](./decisions/010-llm-provider-strategy.md) | Gemini Flash, multi-provider ready | MVP |
 | [011](./decisions/011-statement-reconciliation.md) | Cartolas y conciliación | **MVP obligatorio** |
+| [012](./decisions/012-imap-email-ingestion.md) | IMAP + App Password para correos | **MVP obligatorio** |
 
 ---
 

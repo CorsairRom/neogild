@@ -96,66 +96,41 @@ LLM_PROVIDER=gemini    # hoy
 | GPT-4o Mini | ~$1.50 | ~$0.80 | ~$0.30 | **~$2.60** |
 | Ollama local | $0 | $0 | $0 | **$0** |
 
-## Setup — Google Cloud Console + AI Studio
+## Setup — Solo Google AI Studio (30 segundos)
 
-### Paso 1: Google AI Studio (Gemini API Key)
+La lectura de correos ahora usa IMAP + App Password (ADR-012), eliminando la necesidad
+de Google Cloud Console. Solo se necesita AI Studio para Gemini.
 
 ```
 1. Ir a https://aistudio.google.com/app/apikey
-2. Iniciar sesión con tu cuenta Google (la misma del correo neogild)
+2. Iniciar sesión con tu cuenta Google
 3. Click "Create API Key"
 4. Copiar la key → va en GOOGLE_GENERATIVE_AI_API_KEY
 
 Tiempo: 30 segundos
 Costo: $0
-```
-
-### Paso 2: Google Cloud Console (Gmail API)
-
-```
-1. Ir a https://console.cloud.google.com
-2. Crear proyecto nuevo: "Neogild"
-3. APIs & Services → Library → buscar "Gmail API" → Enable
-4. APIs & Services → OAuth consent screen:
-   a. User Type: External
-   b. App name: "Neogild"
-   c. User support email: tu correo
-   d. Developer contact: tu correo
-   e. Scopes: solo gmail.readonly (NO modificar correos)
-   f. Test users: agregar neogild@tudominio.com
-   g. Publishing status: Testing (no publicar, uso personal)
-5. APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID:
-   a. Application type: Desktop app
-   b. Name: "Neogild Desktop"
-   c. Crear → descargar JSON
-6. Ir a https://developers.google.com/oauthplayground
-   a. Gear icon → Use your own OAuth credentials → pegar Client ID + Secret
-   b. Step 1: seleccionar scope "Gmail API v1 → https://.../auth/gmail.readonly"
-   c. Authorize APIs → iniciar sesión con neogild@gmail.com
-   d. Step 2: Exchange authorization code for tokens
-   e. Copiar Refresh Token → va en GMAIL_REFRESH_TOKEN
-
-Tiempo: 10 minutos
-Costo: $0
+Pantallas de Google Cloud visitadas: 0
 ```
 
 ### Variables de entorno resultantes
 
 ```bash
-# Gemini (LLM)
-GOOGLE_GENERATIVE_AI_API_KEY=AIza...      # de AI Studio
+# Gemini (LLM) — de AI Studio
+GOOGLE_GENERATIVE_AI_API_KEY=AIza...
 
-# Gmail API
-GMAIL_CLIENT_ID=xxx.apps.googleusercontent.com  # de Cloud Console
-GMAIL_CLIENT_SECRET=GOCSPX-...                   # de Cloud Console
-GMAIL_REFRESH_TOKEN=1//...                       # de OAuth Playground
+# Email (IMAP) — de Gmail App Password (ver ADR-012)
+GMAIL_USER=neogild@gmail.com
+GMAIL_APP_PASSWORD="xxxx xxxx xxxx xxxx"
 
 # Cron security
-CRON_SECRET=$(openssl rand -hex 32)              # generado local
+CRON_SECRET=$(openssl rand -hex 32)
 
 # LLM Provider (cambiable)
-LLM_PROVIDER=gemini                              # default
+LLM_PROVIDER=gemini
 ```
+
+> **Nota**: `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET` y `GMAIL_REFRESH_TOKEN` ya no se necesitan.
+> La lectura de correos migró a IMAP (ADR-012).
 
 ### Cómo agregar un provider nuevo (guía futura)
 
