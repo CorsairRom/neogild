@@ -1,21 +1,9 @@
-// Pure helpers for the Gmail REST API: query building, base64url decoding,
-// header lookup and body extraction. Kept free of I/O so they run under
-// `deno test` without network access.
+import { KNOWN_SENDERS } from './senders'
 
-export const KNOWN_SENDERS = [
-  'enviodigital@bancochile.cl',
-  'serviciodetransferencias@bancochile.cl',
-  'reply@info.bice.cl',
-  'info@mercadopago.com',
-  'no-reply@tenpo.cl',
-  'contacto@bci.cl',
-  'notificaciones@correo.bancoestado.cl',
-  'noreply@correo.bancoestado.cl',
-  'notificaciones@cl.bancofalabella.com',
-] as const
+export { KNOWN_SENDERS, isKnownSender } from './senders'
 
 export function buildGmailQuery(afterEpochSeconds: number): string {
-  const from = KNOWN_SENDERS.map((s) => `from:${s}`).join(' OR ')
+  const from = KNOWN_SENDERS.map((s: (typeof KNOWN_SENDERS)[number]) => `from:${s}`).join(' OR ')
   return `(${from}) after:${Math.floor(afterEpochSeconds)}`
 }
 

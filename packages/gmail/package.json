@@ -16,9 +16,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.0"
+    "@supabase/supabase-js": "^2.49.0",
+    "imapflow": "^1.0.188",
+    "mailparser": "^3.7.2"
   },
   "devDependencies": {
+    "@types/mailparser": "^3.4.6",
     "typescript": "^5.8.0",
     "vitest": "^4.1.0"
   }

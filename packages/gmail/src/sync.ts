@@ -1,22 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import {
-  buildGmailQuery,
-  extractBody,
-  headerValue,
-  type GmailPayload,
-} from './gmail'
-import {
-  parseEmail,
-  sourceForEmail,
-  type ParsedMovement,
-  type RawEmail,
-} from './parsers'
+import type { EmailClient } from './email-client'
+import { parseEmail, sourceForEmail, type RawEmail } from './parsers'
 import { isForwarded, unwrapForward } from './forward'
 
-const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me'
 const DEFAULT_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000
 
-export interface GmailSyncSummary {
+export interface EmailSyncSummary {
   mode: 'user' | 'cron'
   since: string
   fetched: number
@@ -32,73 +21,19 @@ export interface GmailSyncSummary {
   failures: string[]
 }
 
-export interface GmailOAuthConfig {
-  clientId: string
-  clientSecret: string
-  refreshToken: string
+/** @deprecated Use EmailSyncSummary */
+export type GmailSyncSummary = EmailSyncSummary
+
+export interface RunEmailSyncOptions {
+  userId: string
+  since?: string
+  client: EmailClient
+  supabase: SupabaseClient
+  mode?: 'user' | 'cron'
 }
 
-export async function refreshAccessToken(
-  config: GmailOAuthConfig,
-): Promise<string> {
-  const res = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      refresh_token: config.refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  })
-  if (!res.ok) {
-    throw new Error(`Gmail token refresh failed: ${res.status} ${await res.text()}`)
-  }
-  const json = (await res.json()) as { access_token?: string }
-  if (!json.access_token) throw new Error('Gmail token refresh returned no access_token')
-  return json.access_token
-}
-
-async function listMessageIds(
-  accessToken: string,
-  query: string,
-): Promise<string[]> {
-  const ids: string[] = []
-  let pageToken: string | undefined
-  do {
-    const url = new URL(`${GMAIL_API}/messages`)
-    url.searchParams.set('q', query)
-    url.searchParams.set('maxResults', '100')
-    if (pageToken) url.searchParams.set('pageToken', pageToken)
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } })
-    if (!res.ok) throw new Error(`Gmail list failed: ${res.status} ${await res.text()}`)
-    const json = (await res.json()) as {
-      messages?: Array<{ id: string }>
-      nextPageToken?: string
-    }
-    for (const m of json.messages ?? []) ids.push(m.id)
-    pageToken = json.nextPageToken
-  } while (pageToken)
-  return ids
-}
-
-async function fetchEmail(accessToken: string, id: string): Promise<RawEmail> {
-  const res = await fetch(`${GMAIL_API}/messages/${id}?format=full`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  })
-  if (!res.ok) throw new Error(`Gmail get ${id} failed: ${res.status} ${await res.text()}`)
-  const json = (await res.json()) as { payload?: GmailPayload; internalDate?: string }
-  const payload = json.payload ?? {}
-  return {
-    id,
-    from: headerValue(payload, 'From'),
-    subject: headerValue(payload, 'Subject'),
-    date: json.internalDate
-      ? new Date(Number.parseInt(json.internalDate, 10)).toISOString()
-      : new Date().toISOString(),
-    body: extractBody(payload),
-  }
-}
+/** @deprecated Use RunEmailSyncOptions */
+export type RunGmailSyncOptions = RunEmailSyncOptions
 
 async function fetchUsdRate(): Promise<number | null> {
   try {
@@ -112,18 +47,10 @@ async function fetchUsdRate(): Promise<number | null> {
   }
 }
 
-export interface RunGmailSyncOptions {
-  userId: string
-  since?: string
-  oauth: GmailOAuthConfig
-  supabase: SupabaseClient
-  mode?: 'user' | 'cron'
-}
-
-export async function runGmailSync(
-  options: RunGmailSyncOptions,
-): Promise<GmailSyncSummary> {
-  const { userId, oauth, supabase, mode = 'user' } = options
+export async function runEmailSync(
+  options: RunEmailSyncOptions,
+): Promise<EmailSyncSummary> {
+  const { userId, client, supabase, mode = 'user' } = options
 
   let since: Date
   if (options.since) {
@@ -143,10 +70,15 @@ export async function runGmailSync(
   }
 
   const runStartedAt = new Date()
-  const accessToken = await refreshAccessToken(oauth)
-  const query = buildGmailQuery(since.getTime() / 1000)
-  const messageIds = await listMessageIds(accessToken, query)
+  let emails: Awaited<ReturnType<EmailClient['fetchSince']>>
+  try {
+    emails = await client.fetchSince(since)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    throw new Error(`IMAP fetch failed: ${message}`)
+  }
 
+  const messageIds = emails.map((e: RawEmail) => e.id)
   const seen = new Set<string>()
   if (messageIds.length > 0) {
     const { data: existing } = await supabase
@@ -164,29 +96,9 @@ export async function runGmailSync(
   let stagedErrors = 0
   const failures: string[] = []
 
-  for (const id of messageIds) {
-    if (seen.has(id)) continue
-    let email: RawEmail
-    try {
-      email = await fetchEmail(accessToken, id)
-      fetched++
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      const { error: stubError } = await supabase.from('email_movements').insert({
-        user_id: userId,
-        gmail_message_id: id,
-        source: 'unknown',
-        email_date: new Date().toISOString(),
-        status: 'error',
-        error_detail: `fetch failed: ${message.slice(0, 300)}`,
-      })
-      if (stubError && !stubError.message.includes('duplicate')) {
-        failures.push(`fetch ${id}: ${message}`)
-      } else {
-        stagedErrors++
-      }
-      continue
-    }
+  for (const email of emails) {
+    if (seen.has(email.id)) continue
+    fetched++
 
     if (isForwarded(email)) forwards++
 
@@ -229,7 +141,7 @@ export async function runGmailSync(
         error_detail: `stage failed: ${insertError.message.slice(0, 300)}`,
       })
       if (stubError && !stubError.message.includes('duplicate')) {
-        failures.push(`stage ${id}: ${insertError.message}`)
+        failures.push(`stage ${email.id}: ${insertError.message}`)
       } else {
         stagedErrors++
       }
@@ -269,3 +181,6 @@ export async function runGmailSync(
     failures,
   }
 }
+
+/** @deprecated Use runEmailSync */
+export const runGmailSync = runEmailSync

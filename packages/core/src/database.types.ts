@@ -296,6 +296,33 @@ export type Database = {
           },
         ]
       }
+      email_credentials: {
+        Row: {
+          app_password: string
+          connected_at: string
+          imap_host: string
+          imap_user: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          app_password: string
+          connected_at?: string
+          imap_host?: string
+          imap_user: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          app_password?: string
+          connected_at?: string
+          imap_host?: string
+          imap_user?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       email_movements: {
         Row: {
           account_hint: string | null
@@ -460,30 +487,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      gmail_credentials: {
-        Row: {
-          connected_at: string
-          email_address: string | null
-          refresh_token: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          connected_at?: string
-          email_address?: string | null
-          refresh_token: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          connected_at?: string
-          email_address?: string | null
-          refresh_token?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
       }
       profiles: {
         Row: {
