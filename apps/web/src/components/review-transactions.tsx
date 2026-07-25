@@ -1,9 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 type Category = { id: string; name: string; parent_id: string | null };
+type ReviewTx = {
+  id: string;
+  description: string | null;
+  amount: number;
+  date: string;
+  type: string;
+  category: string | null;
+  needs_review: boolean;
+};
 
 function formatCLP(amount: number) {
   return new Intl.NumberFormat("es-CL", {
@@ -41,22 +51,173 @@ function typeBadgeClass(type: string) {
   }
 }
 
-export function ReviewTransactionRow({
-  tx,
+async function patchCategory(id: string, category: string) {
+  const res = await fetch(`/api/transactions/${id}/category`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ category, remember: true }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error ?? "Error");
+}
+
+export function ReviewTransactionsTable({
+  transactions,
   categories,
 }: {
-  tx: {
-    id: string;
-    description: string | null;
-    amount: number;
-    date: string;
-    type: string;
-    category: string | null;
-    needs_review: boolean;
-  };
+  transactions: ReviewTx[];
   categories: Category[];
 }) {
-  const router = useRouter();
+  const [rows, setRows] = useState(transactions);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkCategory, setBulkCategory] = useState("");
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
+  const leafCategories = useMemo(
+    () => categories.filter((c) => c.parent_id !== null),
+    [categories],
+  );
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelected((prev) => (prev.size === rows.length ? new Set() : new Set(rows.map((r) => r.id))));
+  }
+
+  function handleRowSaved(id: string) {
+    setRows((prev) => prev.filter((r) => r.id !== id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  async function handleBulkApply() {
+    if (!bulkCategory || selected.size === 0) return;
+    setBulkLoading(true);
+    setBulkError(null);
+
+    const ids = [...selected];
+    const results = await Promise.allSettled(ids.map((id) => patchCategory(id, bulkCategory)));
+
+    const failed = new Set<string>();
+    results.forEach((result, i) => {
+      if (result.status === "rejected") failed.add(ids[i]);
+    });
+
+    setRows((prev) => prev.filter((r) => !ids.includes(r.id) || failed.has(r.id)));
+    setSelected(failed);
+    setBulkCategory("");
+    setBulkLoading(false);
+    if (failed.size > 0) {
+      setBulkError(`${failed.size} de ${ids.length} no se pudieron categorizar. Reintentá.`);
+    }
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <p className="px-4 py-12 text-center text-sm text-zinc-500">Todo categorizado.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {selected.size > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+          <span className="font-medium">{selected.size} seleccionadas</span>
+          <select
+            value={bulkCategory}
+            onChange={(e) => setBulkCategory(e.target.value)}
+            className="rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          >
+            <option value="">Elegir categoría…</option>
+            {leafCategories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleBulkApply}
+            disabled={bulkLoading || !bulkCategory}
+          >
+            {bulkLoading ? "Aplicando…" : `Aplicar a ${selected.size}`}
+          </Button>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            className="text-xs text-zinc-500 underline"
+          >
+            Cancelar selección
+          </button>
+          {bulkError && <p className="w-full text-xs text-red-600 dark:text-red-400">{bulkError}</p>}
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <table className="w-full min-w-[640px] text-left text-sm">
+          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/80">
+            <tr>
+              <th className="w-10 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={selected.size === rows.length}
+                  onChange={toggleSelectAll}
+                  aria-label="Seleccionar todas"
+                />
+              </th>
+              <th className="px-4 py-3 font-medium">Fecha</th>
+              <th className="px-4 py-3 font-medium">Descripción</th>
+              <th className="px-4 py-3 font-medium text-right">Monto</th>
+              <th className="px-4 py-3 font-medium">Tipo</th>
+              <th className="px-4 py-3 font-medium">Estado</th>
+              <th className="px-4 py-3 font-medium">Categoría</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((tx) => (
+              <ReviewTransactionRow
+                key={tx.id}
+                tx={tx}
+                categories={categories}
+                selected={selected.has(tx.id)}
+                onToggleSelect={() => toggleSelect(tx.id)}
+                onSaved={() => handleRowSaved(tx.id)}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ReviewTransactionRow({
+  tx,
+  categories,
+  selected,
+  onToggleSelect,
+  onSaved,
+}: {
+  tx: ReviewTx;
+  categories: Category[];
+  selected: boolean;
+  onToggleSelect: () => void;
+  onSaved: () => void;
+}) {
   const [category, setCategory] = useState(tx.category ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,14 +230,8 @@ export function ReviewTransactionRow({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/transactions/${tx.id}/category`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category, remember: true }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Error");
-      router.refresh();
+      await patchCategory(tx.id, category);
+      onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -86,6 +241,14 @@ export function ReviewTransactionRow({
 
   return (
     <tr className="border-b border-zinc-100 dark:border-zinc-800">
+      <td className="px-4 py-2">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          aria-label={`Seleccionar ${tx.description ?? "transacción"}`}
+        />
+      </td>
       <td className="px-3 py-2 whitespace-nowrap">
         {new Date(tx.date).toLocaleDateString("es-CL")}
       </td>
@@ -133,13 +296,9 @@ export function ReviewTransactionRow({
               </option>
             ))}
           </select>
-          <button
-            type="submit"
-            disabled={loading || !category}
-            className="rounded bg-zinc-900 px-2 py-1 text-xs text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-          >
+          <Button type="submit" size="sm" disabled={loading || !category}>
             {loading ? "…" : "Guardar"}
-          </button>
+          </Button>
         </form>
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       </td>
