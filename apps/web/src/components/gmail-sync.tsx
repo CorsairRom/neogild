@@ -12,6 +12,8 @@ type SyncSummary = {
   staged_errors?: number;
   pending?: number;
   failures?: string[];
+  cartolas_staged?: number;
+  cartola_imported?: number;
   categorize?: {
     rule_matched?: number;
     llm_matched?: number;
@@ -36,6 +38,12 @@ function formatSyncSummary(data: SyncSummary): string {
   if ((data.pending ?? 0) > 0) {
     parts.push(`${data.pending} pending (USD rate)`);
   }
+  if ((data.cartolas_staged ?? 0) > 0) {
+    parts.push(`${data.cartolas_staged} cartolas`);
+  }
+  if ((data.cartola_imported ?? 0) > 0) {
+    parts.push(`${data.cartola_imported} cartola txs`);
+  }
   if (data.categorize) {
     parts.push(
       `cat rules ${data.categorize.rule_matched ?? 0}, llm ${data.categorize.llm_matched ?? 0}`,
@@ -47,30 +55,36 @@ function formatSyncSummary(data: SyncSummary): string {
 export function SyncButton({ since }: { since?: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [backfillLoading, setBackfillLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSync() {
-    setLoading(true);
+  async function runSync(body: { since?: string }) {
     setError(null);
     setResult(null);
+    const res = await fetch("/api/gmail/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = (await res.json()) as SyncSummary & { error?: string };
+    if (!res.ok) throw new Error(data.error ?? "Sync failed");
+    setResult(formatSyncSummary(data));
+    if ((data.failures?.length ?? 0) > 0) {
+      setError(data.failures!.join(" · "));
+    } else if ((data.promoted ?? 0) === 0 && (data.parsed ?? 0) > 0) {
+      setError(
+        "Correos parseados pero no promovidos. Revisa /inbox (errores de cuenta) o Configuración → Cuentas.",
+      );
+    }
+    router.refresh();
+    return data;
+  }
+
+  async function handleSync() {
+    setLoading(true);
     try {
-      const res = await fetch("/api/gmail/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(since ? { since } : {}),
-      });
-      const data = (await res.json()) as SyncSummary & { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Sync failed");
-      setResult(formatSyncSummary(data));
-      if ((data.failures?.length ?? 0) > 0) {
-        setError(data.failures!.join(" · "));
-      } else if ((data.promoted ?? 0) === 0 && (data.parsed ?? 0) > 0) {
-        setError(
-          "Correos parseados pero no promovidos. Revisa /inbox (errores de cuenta) o Configuración → Cuentas.",
-        );
-      }
-      router.refresh();
+      await runSync(since ? { since } : {});
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -78,16 +92,49 @@ export function SyncButton({ since }: { since?: string }) {
     }
   }
 
+  async function handleBackfill() {
+    setBackfillLoading(true);
+    try {
+      const data = await runSync({ since: "2026-01-01" });
+      const cartola = (data as SyncSummary & { cartolas_staged?: number }).cartolas_staged ?? 0;
+      if (cartola > 0) {
+        const { movements: rows } = await fetch("/api/email-movements").then((r) => r.json()) as {
+          movements?: Array<{ id: string; source: string; status: string }>;
+        };
+        const pending = rows?.filter(
+          (m) => m.source === "bancoestado_cartola" && m.status === "pending_attachment",
+        );
+        for (const row of pending ?? []) {
+          await fetch(`/api/email-movements/${row.id}/parse-cartola`, { method: "POST" });
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setBackfillLoading(false);
+    }
+  }
+
   return (
     <div className="space-y-2">
-      <button
-        type="button"
-        onClick={handleSync}
-        disabled={loading}
-        className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-      >
-        {loading ? "Sincronizando…" : since ? `Sync desde ${since}` : "Sync correos"}
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={handleSync}
+          disabled={loading || backfillLoading}
+          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          {loading ? "Sincronizando…" : since ? `Sync desde ${since}` : "Sync correos"}
+        </button>
+        <button
+          type="button"
+          onClick={handleBackfill}
+          disabled={loading || backfillLoading}
+          className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+        >
+          {backfillLoading ? "Importando histórico…" : "Sync histórico + cartolas"}
+        </button>
+      </div>
       {result && <p className="text-sm text-green-700 dark:text-green-400">{result}</p>}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
     </div>

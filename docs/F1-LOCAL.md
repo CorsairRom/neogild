@@ -107,6 +107,29 @@ Vuelve a sync. Revisa `/inbox` (estado `promoted` o `error`).
 
 ---
 
+## Internal Server Error (500)
+
+Causas habituales tras cambios de código o migraciones:
+
+| Síntoma | Causa | Fix |
+|---------|-------|-----|
+| `500` en todas las rutas | Proceso Next.js zombie + `.next` corrupto | `npm run dev:fresh` luego `npm run dev:web` |
+| `EADDRINUSE :::3000` | Dev server duplicado | `fuser -k 3000/tcp` o `npm run dev:fresh` |
+| `column "rut" does not exist` | Migración no aplicada | `npx supabase migration up` |
+| `503` en `/api/health` | Supabase apagado | `npm run db:start` |
+
+**Recuperación rápida:**
+
+```bash
+npm run dev:fresh    # migraciones + limpia .next + libera puerto 3000
+npm run dev:web
+curl http://localhost:3000/api/health   # → {"ok":true,"db":"connected",...}
+```
+
+Tras agregar migraciones: `npx supabase migration up` (o `npm run db:reset` si querés seed limpio).
+
+---
+
 ## Cuándo desplegar en Coolify
 
 **No hace falta para cerrar F1.** Despliega cuando quieras sync automático 24/7 (`npm run sync:email` en cron).

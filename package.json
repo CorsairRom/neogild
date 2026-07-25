@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "turbo dev",
     "dev:web": "turbo dev --filter=@neogild/web",
+    "dev:fresh": "bash scripts/dev-fresh.sh",
     "sync:email": "node --env-file=apps/web/.env.local scripts/sync-email.mjs",
     "sync:gmail": "npm run sync:email",
     "build": "turbo build",
