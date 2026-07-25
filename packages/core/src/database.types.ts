@@ -43,6 +43,8 @@ export type Database = {
           entity: Database["public"]["Enums"]["entity_type"]
           id: string
           is_archived: boolean
+          last_statement_balance: number | null
+          last_statement_date: string | null
           metadata: Json | null
           name: string
           on_budget: boolean
@@ -59,6 +61,8 @@ export type Database = {
           entity?: Database["public"]["Enums"]["entity_type"]
           id?: string
           is_archived?: boolean
+          last_statement_balance?: number | null
+          last_statement_date?: string | null
           metadata?: Json | null
           name: string
           on_budget?: boolean
@@ -75,6 +79,8 @@ export type Database = {
           entity?: Database["public"]["Enums"]["entity_type"]
           id?: string
           is_archived?: boolean
+          last_statement_balance?: number | null
+          last_statement_date?: string | null
           metadata?: Json | null
           name?: string
           on_budget?: boolean
@@ -1257,6 +1263,8 @@ export type Database = {
           entity: Database["public"]["Enums"]["entity_type"]
           id: string
           is_archived: boolean
+          last_statement_balance: number | null
+          last_statement_date: string | null
           metadata: Json | null
           name: string
           on_budget: boolean
@@ -1272,6 +1280,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      _pick_peer_account: {
+        Args: { p_account_id: string; p_user_id: string }
+        Returns: string
+      }
       _update_account_balance: {
         Args: { p_account_id: string; p_delta: number }
         Returns: {
@@ -1282,6 +1294,8 @@ export type Database = {
           entity: Database["public"]["Enums"]["entity_type"]
           id: string
           is_archived: boolean
+          last_statement_balance: number | null
+          last_statement_date: string | null
           metadata: Json | null
           name: string
           on_budget: boolean
@@ -1307,6 +1321,8 @@ export type Database = {
           entity: Database["public"]["Enums"]["entity_type"]
           id: string
           is_archived: boolean
+          last_statement_balance: number | null
+          last_statement_date: string | null
           metadata: Json | null
           name: string
           on_budget: boolean
@@ -1353,6 +1369,8 @@ export type Database = {
           entity: Database["public"]["Enums"]["entity_type"]
           id: string
           is_archived: boolean
+          last_statement_balance: number | null
+          last_statement_date: string | null
           metadata: Json | null
           name: string
           on_budget: boolean
@@ -1541,6 +1559,22 @@ export type Database = {
         }
       }
       get_spa_annual_summary: { Args: { p_year: number }; Returns: Json }
+      import_ledger_line: {
+        Args: {
+          p_account_id: string
+          p_amount: number
+          p_cartola_kind?: string
+          p_category?: string
+          p_date: string
+          p_description: string
+          p_is_deposit?: boolean
+          p_metadata?: Json
+          p_needs_review?: boolean
+          p_tx_type: Database["public"]["Enums"]["transaction_type"]
+          p_user_id: string
+        }
+        Returns: Json
+      }
       link_transaction_to_invoice: {
         Args: {
           p_invoice_id: string
@@ -1635,6 +1669,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      pair_cartola_own_transfers: {
+        Args: { p_user_id?: string }
+        Returns: Json
+      }
       pay_debt_installment: {
         Args: { p_date?: string; p_debt_id: string }
         Returns: Json
@@ -1661,6 +1699,7 @@ export type Database = {
         Args: { p_usd_rate?: number; p_user_id?: string }
         Returns: Json
       }
+      rebuild_account_balances: { Args: { p_user_id?: string }; Returns: Json }
       receive_payment: {
         Args: {
           p_amount: number
@@ -1681,6 +1720,8 @@ export type Database = {
           entity: Database["public"]["Enums"]["entity_type"]
           id: string
           is_archived: boolean
+          last_statement_balance: number | null
+          last_statement_date: string | null
           metadata: Json | null
           name: string
           on_budget: boolean

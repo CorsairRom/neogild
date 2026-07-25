@@ -18,6 +18,8 @@ export type Database = {
           entity: Database["public"]["Enums"]["entity_type"]
           id: string
           is_archived: boolean
+          last_statement_balance: number | null
+          last_statement_date: string | null
           metadata: Json | null
           name: string
           on_budget: boolean
@@ -34,6 +36,8 @@ export type Database = {
           entity?: Database["public"]["Enums"]["entity_type"]
           id?: string
           is_archived?: boolean
+          last_statement_balance?: number | null
+          last_statement_date?: string | null
           metadata?: Json | null
           name: string
           on_budget?: boolean
@@ -50,6 +54,8 @@ export type Database = {
           entity?: Database["public"]["Enums"]["entity_type"]
           id?: string
           is_archived?: boolean
+          last_statement_balance?: number | null
+          last_statement_date?: string | null
           metadata?: Json | null
           name?: string
           on_budget?: boolean

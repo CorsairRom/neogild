@@ -11,6 +11,8 @@ export type AccountBalanceRow = {
   balance: number
   currency: string
   metadata: Record<string, unknown> | null
+  last_statement_balance: number | null
+  last_statement_date: string | null
 }
 
 export type AccountMonthActivity = {
@@ -26,7 +28,9 @@ export async function getPersonalAccountBalances(
 ): Promise<AccountBalanceRow[]> {
   const { data, error } = await supabase
     .from('accounts')
-    .select('id, name, subtype, type, balance, currency, metadata')
+    .select(
+      'id, name, subtype, type, balance, currency, metadata, last_statement_balance, last_statement_date',
+    )
     .eq('entity', 'personal')
     .eq('is_archived', false)
     .order('name')

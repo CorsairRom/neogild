@@ -14,6 +14,8 @@ export interface CartolaMeta {
   issuedAt: string | null;
   from: string | null;
   to: string | null;
+  /** Running balance printed after the last line — the statement's closing balance. */
+  closingBalance: number | null;
 }
 
 function parseCLP(raw: string): number {
@@ -67,6 +69,7 @@ export function parseBancoEstadoCartolaText(text: string): {
       issuedAt: issuedAt ? clDateToIso(issuedAt) : null,
       from: from ? clDateToIso(from) : null,
       to: to ? clDateToIso(to) : null,
+      closingBalance: lines.length > 0 ? lines[lines.length - 1].balance : null,
     },
     lines,
   };

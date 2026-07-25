@@ -36,7 +36,7 @@ export default async function AccountDetailPage({
 
   const { data: account } = await supabase
     .from("accounts")
-    .select("id, name, subtype, balance, currency")
+    .select("id, name, subtype, balance, currency, last_statement_balance, last_statement_date")
     .eq("id", id)
     .single();
 
@@ -109,6 +109,23 @@ export default async function AccountDetailPage({
           </>
         )}
       </section>
+
+      {account.last_statement_balance !== null && (
+        <p
+          className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
+            account.balance === account.last_statement_balance
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"
+              : "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"
+          }`}
+        >
+          {account.balance === account.last_statement_balance
+            ? `Coincide con la cartola al ${account.last_statement_date}.`
+            : `Diferencia vs. cartola al ${account.last_statement_date}: ${formatCLP(
+                account.balance - account.last_statement_balance,
+                { signed: true },
+              )}.`}
+        </p>
+      )}
 
       {(activity?.transfer_in ?? 0) > 0 || (activity?.transfer_out ?? 0) > 0 ? (
         <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">

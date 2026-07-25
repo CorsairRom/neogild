@@ -102,6 +102,35 @@ export async function POST(request: Request, context: RouteContext) {
     importSource: "manual",
   });
 
+  let reconciliation: { closingBalance: number; trackedBalance: number; delta: number } | null =
+    null;
+
+  if (parsed.meta.closingBalance !== null) {
+    if (parsed.meta.to) {
+      await admin
+        .from("accounts")
+        .update({
+          last_statement_balance: parsed.meta.closingBalance,
+          last_statement_date: parsed.meta.to,
+        })
+        .eq("id", account.id);
+    }
+
+    const { data: refreshed } = await admin
+      .from("accounts")
+      .select("balance")
+      .eq("id", account.id)
+      .single();
+
+    if (refreshed) {
+      reconciliation = {
+        closingBalance: parsed.meta.closingBalance,
+        trackedBalance: refreshed.balance,
+        delta: refreshed.balance - parsed.meta.closingBalance,
+      };
+    }
+  }
+
   return NextResponse.json({
     account: account.name,
     upload_id: uploadId,
@@ -110,5 +139,6 @@ export async function POST(request: Request, context: RouteContext) {
     imported: result.imported,
     skipped: result.skipped,
     meta: parsed.meta,
+    reconciliation,
   });
 }

@@ -2,8 +2,11 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { formatCLP } from "@/lib/format";
+import { Button } from "@/components/ui/button";
 
 type AccountOption = { id: string; name: string };
+type Reconciliation = { closingBalance: number; trackedBalance: number; delta: number };
 
 export function CartolaUploadForm({
   accounts,
@@ -21,6 +24,7 @@ export function CartolaUploadForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [reconciliation, setReconciliation] = useState<Reconciliation | null>(null);
 
   useEffect(() => {
     if (defaultAccountId) setAccountId(defaultAccountId);
@@ -33,6 +37,7 @@ export function CartolaUploadForm({
     setLoading(true);
     setError(null);
     setResult(null);
+    setReconciliation(null);
 
     try {
       const form = new FormData();
@@ -49,6 +54,7 @@ export function CartolaUploadForm({
         lines?: number;
         account?: string;
         meta?: { from?: string | null; to?: string | null };
+        reconciliation?: Reconciliation | null;
       };
 
       if (!res.ok) throw new Error(data.error ?? "Error al importar");
@@ -60,6 +66,7 @@ export function CartolaUploadForm({
       setResult(
         `${data.account}: ${data.imported} movimientos importados, ${data.skipped} duplicados (${data.lines} líneas en PDF${period}).`,
       );
+      setReconciliation(data.reconciliation ?? null);
       setFile(null);
       router.refresh();
     } catch (err) {
@@ -124,17 +131,26 @@ export function CartolaUploadForm({
         </p>
       </div>
 
-      <button
-        type="submit"
-        disabled={loading || !file || !accountId}
-        className="rounded-md px-4 py-2 text-sm font-semibold transition enabled:bg-zinc-900 enabled:text-white enabled:shadow-sm enabled:hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:enabled:bg-white dark:enabled:text-zinc-900 dark:enabled:hover:bg-zinc-100 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
-      >
+      <Button type="submit" disabled={loading || !file || !accountId}>
         {loading ? "Importando…" : "Importar cartola"}
-      </button>
+      </Button>
 
       {result && (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
           {result}
+        </p>
+      )}
+      {reconciliation && (
+        <p
+          className={`rounded-lg border px-3 py-2 text-sm ${
+            reconciliation.delta === 0
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100"
+              : "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"
+          }`}
+        >
+          {reconciliation.delta === 0
+            ? "Tu saldo coincide con la cartola."
+            : `Diferencia vs. cartola: ${formatCLP(reconciliation.delta, { signed: true })} (cartola: ${formatCLP(reconciliation.closingBalance, { signed: true })}, tuyo: ${formatCLP(reconciliation.trackedBalance, { signed: true })}).`}
         </p>
       )}
       {error && (
