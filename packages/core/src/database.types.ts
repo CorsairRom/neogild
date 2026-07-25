@@ -327,6 +327,7 @@ export type Database = {
         Row: {
           account_hint: string | null
           amount: number | null
+          attachment_path: string | null
           bank_tx_id: string | null
           counterparty: string | null
           created_at: string
@@ -346,6 +347,7 @@ export type Database = {
         Insert: {
           account_hint?: string | null
           amount?: number | null
+          attachment_path?: string | null
           bank_tx_id?: string | null
           counterparty?: string | null
           created_at?: string
@@ -365,6 +367,7 @@ export type Database = {
         Update: {
           account_hint?: string | null
           amount?: number | null
+          attachment_path?: string | null
           bank_tx_id?: string | null
           counterparty?: string | null
           created_at?: string
@@ -496,6 +499,7 @@ export type Database = {
           is_onboarded: boolean
           name: string | null
           phone: string | null
+          rut: string | null
           updated_at: string
         }
         Insert: {
@@ -505,6 +509,7 @@ export type Database = {
           is_onboarded?: boolean
           name?: string | null
           phone?: string | null
+          rut?: string | null
           updated_at?: string
         }
         Update: {
@@ -514,6 +519,7 @@ export type Database = {
           is_onboarded?: boolean
           name?: string | null
           phone?: string | null
+          rut?: string | null
           updated_at?: string
         }
         Relationships: []

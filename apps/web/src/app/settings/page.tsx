@@ -7,6 +7,7 @@ import {
   EmailDisconnectButton,
   SyncButton,
 } from "@/components/gmail-sync";
+import { RutSettingsForm } from "@/components/rut-settings-form";
 
 export default async function SettingsPage({
   searchParams,
@@ -14,14 +15,20 @@ export default async function SettingsPage({
   searchParams: Promise<{ error?: string; connected?: string }>;
 }) {
   const params = await searchParams;
-  const { user } = await requireOnboarded();
+  const { user, supabase } = await requireOnboarded();
   const connection = await getEmailConnectionStatus(user.id);
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("rut")
+    .eq("id", user.id)
+    .single();
 
   return (
     <AppShell
       userEmail={user.email ?? ""}
       title="Configuración"
-      description="Correo IMAP, reglas de categorización y cuentas bancarias."
+      description="Correo IMAP, RUT para cartolas, reglas de categorización y cuentas bancarias."
     >
       {params.error && (
         <p className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
@@ -51,6 +58,17 @@ export default async function SettingsPage({
               <EmailConnectForm />
             </div>
           )}
+        </section>
+
+        <section className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
+          <h2 className="font-medium">RUT — cartolas BancoEstado</h2>
+          {!profile?.rut && (
+            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+              Requerido para abrir PDFs de cartola CuentaRUT (contraseña = últimos 4
+              dígitos del RUT).
+            </p>
+          )}
+          <RutSettingsForm />
         </section>
 
         <section className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
