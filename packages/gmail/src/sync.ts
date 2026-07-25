@@ -1,7 +1,40 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { EmailClient } from './email-client'
-import { parseEmail, sourceForEmail, type RawEmail } from './parsers'
 import { isForwarded, unwrapForward } from './forward'
+import {
+  buildCartolaRow,
+  isCartolaEmail,
+  parseEmail,
+  sourceForEmail,
+  type EmailAttachment,
+  type RawEmail,
+} from './parsers'
+
+const ATTACHMENTS_BUCKET = 'email-attachments'
+
+async function uploadCartolaPdf(
+  supabase: SupabaseClient,
+  userId: string,
+  messageId: string,
+  attachments: EmailAttachment[] | undefined,
+): Promise<string | null> {
+  const pdf = attachments?.find(
+    (a) =>
+      a.contentType === 'application/pdf' ||
+      a.filename.toLowerCase().endsWith('.pdf'),
+  )
+  if (!pdf?.content?.length) return null
+
+  const safeName = pdf.filename.replace(/[^\w.-]+/g, '_') || 'cartola.pdf'
+  const path = `${userId}/${messageId}/${safeName}`
+
+  const { error } = await supabase.storage.from(ATTACHMENTS_BUCKET).upload(path, pdf.content, {
+    contentType: 'application/pdf',
+    upsert: true,
+  })
+  if (error) return null
+  return path
+}
 
 const DEFAULT_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -13,6 +46,7 @@ export interface EmailSyncSummary {
   ignored: number
   forwards: number
   staged_errors: number
+  cartolas_staged: number
   usd_rate: number | null
   promoted: number
   pending: number
@@ -64,9 +98,18 @@ export async function runEmailSync(
       .select('gmail_watermark')
       .eq('user_id', userId)
       .maybeSingle()
-    since = state?.gmail_watermark
-      ? new Date(state.gmail_watermark)
-      : new Date(Date.now() - DEFAULT_LOOKBACK_MS)
+    const { count: stagedCount } = await supabase
+      .from('email_movements')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+    // Empty inbox after db reset: ignore watermark and re-fetch historical mail.
+    if (stagedCount === 0) {
+      since = new Date(Date.now() - DEFAULT_LOOKBACK_MS)
+    } else {
+      since = state?.gmail_watermark
+        ? new Date(state.gmail_watermark)
+        : new Date(Date.now() - DEFAULT_LOOKBACK_MS)
+    }
   }
 
   const runStartedAt = new Date()
@@ -94,6 +137,7 @@ export async function runEmailSync(
   let ignored = 0
   let forwards = 0
   let stagedErrors = 0
+  let cartolasStaged = 0
   const failures: string[] = []
 
   for (const email of emails) {
@@ -103,6 +147,32 @@ export async function runEmailSync(
     if (isForwarded(email)) forwards++
 
     const normalized = unwrapForward(email)
+
+    if (isCartolaEmail(normalized)) {
+      const attachmentPath = await uploadCartolaPdf(
+        supabase,
+        userId,
+        email.id,
+        email.attachments,
+      )
+      const cartola = buildCartolaRow(email, normalized)
+      const { error: insertError } = await supabase.from('email_movements').insert({
+        ...cartola,
+        user_id: userId,
+        status: 'pending_attachment',
+        attachment_path: attachmentPath,
+        error_detail: attachmentPath
+          ? null
+          : 'PDF adjunto no encontrado en el correo (¿reenvío sin adjunto?)',
+      })
+      if (insertError && !insertError.message.includes('duplicate')) {
+        failures.push(`cartola ${email.id}: ${insertError.message}`)
+      } else if (!insertError) {
+        cartolasStaged++
+      }
+      continue
+    }
+
     const result = parseEmail(email)
     if (result === 'ignore') {
       ignored++
@@ -177,6 +247,7 @@ export async function runEmailSync(
     ignored,
     forwards,
     staged_errors: stagedErrors,
+    cartolas_staged: cartolasStaged,
     usd_rate: usdRate,
     promoted: (promoteResult as { promoted?: number })?.promoted ?? 0,
     pending: (promoteResult as { pending?: number })?.pending ?? 0,

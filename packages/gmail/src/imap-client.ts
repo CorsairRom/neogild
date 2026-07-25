@@ -67,6 +67,14 @@ export async function fetchBankEmailsSince(
         parsed.text ||
         ''
 
+      const attachments = (parsed.attachments ?? [])
+        .filter((a) => a.content && a.content.length > 0)
+        .map((a) => ({
+          filename: a.filename ?? 'attachment.bin',
+          contentType: a.contentType ?? 'application/octet-stream',
+          content: Buffer.from(a.content),
+        }))
+
       results.push({
         id: stableMessageId(
           parsed.messageId ?? undefined,
@@ -77,6 +85,7 @@ export async function fetchBankEmailsSince(
         subject,
         date: date.toISOString(),
         body,
+        attachments: attachments.length > 0 ? attachments : undefined,
       })
     }
   } finally {

@@ -36,6 +36,13 @@ export interface RawEmail {
   subject: string
   date: string
   body: string
+  attachments?: EmailAttachment[]
+}
+
+export interface EmailAttachment {
+  filename: string
+  contentType: string
+  content: Buffer
 }
 
 export interface ParsedMovement {
@@ -60,7 +67,7 @@ const NOISE_SENDERS = [
 ]
 
 const NOISE_SUBJECTS = [
-  /cartola/i,
+  // cartola subjects handled by isCartolaEmail — not noise
   /estado de cuenta/i,
   // Known transactional senders also emit non-movement notices; route them to
   // noise so they don't pile up as 'unknown' error rows in the review inbox.
@@ -554,14 +561,55 @@ export function parseBancoFalabellaTransferIn(email: RawEmail): ParsedMovement |
 }
 
 // ---------------------------------------------------------------------------
+// Cartolas (PDF adjunto — F4 statement pipeline)
+// ---------------------------------------------------------------------------
+
+/** Bank statement emails with encrypted PDF attachments. */
+export function isCartolaEmail(email: RawEmail): boolean {
+  return cartolaSourceForEmail(email) !== null
+}
+
+export function cartolaSourceForEmail(email: RawEmail): EmailSource | null {
+  const from = email.from.toLowerCase()
+  const subject = email.subject
+
+  if (
+    from.includes('bancoestado@correo.bancoestado.cl') &&
+    /cartola de cuentarut/i.test(subject)
+  ) {
+    return 'bancoestado_cartola'
+  }
+  return null
+}
+
+export function buildCartolaRow(
+  email: RawEmail,
+  normalized: RawEmail,
+): ParsedMovement {
+  const source = cartolaSourceForEmail(normalized)!
+  return {
+    gmail_message_id: email.id,
+    source,
+    amount: null,
+    currency: 'CLP',
+    counterparty: null,
+    merchant: null,
+    account_hint: null,
+    dest_hint: null,
+    email_date: normalized.date,
+    bank_tx_id: null,
+    raw_snippet: normalized.body.slice(0, 500),
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Dispatch
 // ---------------------------------------------------------------------------
 
 export function isNoise(email: RawEmail): boolean {
+  if (isCartolaEmail(email)) return false
   const from = email.from.toLowerCase()
   if (NOISE_SENDERS.some((s) => from.includes(s))) return true
-  // BancoEstado cartola: PDF adjunto — F4 statement pipeline, not movement parse.
-  if (from.includes('bancoestado@correo.bancoestado.cl')) return true
   return NOISE_SUBJECTS.some((re) => re.test(email.subject))
 }
 
