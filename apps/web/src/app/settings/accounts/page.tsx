@@ -1,9 +1,9 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AppNav } from "@/components/app-nav";
+import { requireOnboarded } from "@/lib/auth/session";
+import { AppShell } from "@/components/app-shell";
 import { formatCLP } from "@/lib/format";
+
+export const dynamic = "force-dynamic";
 
 type Account = {
   id: string;
@@ -17,34 +17,28 @@ type Account = {
   } | null;
 };
 
-export default function AccountsSettingsPage() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loading, setLoading] = useState(true);
+export default async function AccountsSettingsPage() {
+  const { supabase, user } = await requireOnboarded();
 
-  useEffect(() => {
-    fetch("/api/accounts")
-      .then((r) => r.json())
-      .then((d) => setAccounts(d.accounts ?? []))
-      .finally(() => setLoading(false));
-  }, []);
+  const { data } = await supabase
+    .from("accounts")
+    .select("id, name, subtype, balance, metadata")
+    .eq("is_archived", false)
+    .order("name");
+  const accounts = (data ?? []) as Account[];
 
   return (
-    <div className="min-h-screen bg-[var(--background)]">
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-        <header className="mb-8 space-y-3 border-b border-zinc-200 pb-6 dark:border-zinc-800">
-          <AppNav />
-          <Link href="/settings" className="text-sm text-zinc-500 hover:underline">
-            ← Configuración
-          </Link>
-          <h1 className="text-2xl font-semibold">Cuentas bancarias</h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Hints que usa el matcher al promover correos → transacciones.
-          </p>
-        </header>
-
-      {loading ? (
-        <p className="text-sm text-zinc-500">Cargando…</p>
-      ) : accounts.length === 0 ? (
+    <AppShell
+      userEmail={user.email ?? ""}
+      title="Cuentas bancarias"
+      description="Hints que usa el matcher al promover correos → transacciones."
+      actions={
+        <Link href="/settings" className="text-sm text-zinc-500 hover:underline">
+          ← Configuración
+        </Link>
+      }
+    >
+      {accounts.length === 0 ? (
         <p className="text-sm text-zinc-500">
           Sin cuentas.{" "}
           <Link href="/onboard" className="underline">
@@ -84,10 +78,9 @@ export default function AccountsSettingsPage() {
         </ul>
       )}
 
-      <Link href="/onboard" className="mt-6 inline-block text-sm underline text-zinc-600">
+      <Link href="/onboard" className="mt-6 inline-block text-sm text-zinc-600 underline">
         Agregar cuentas (re-onboard manual en DB si ya onboarded)
       </Link>
-      </div>
-    </div>
+    </AppShell>
   );
 }

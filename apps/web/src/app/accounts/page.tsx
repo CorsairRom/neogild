@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireOnboarded } from "@/lib/auth/session";
 import { AppShell } from "@/components/app-shell";
-import { AccountBalancesPanel } from "@/components/account-balances-panel";
+import { buttonClasses } from "@/components/ui/button";
 import { formatCLP } from "@/lib/format";
 import {
   getAccountMonthActivity,
@@ -33,21 +33,19 @@ export default async function AccountsPage({
       title="Mis cuentas"
       description="Saldo actual por cuenta y transferencias entre tus bancos."
       actions={
-        <Link
-          href="/accounts/upload"
-          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-        >
+        <Link href="/accounts/upload" className={buttonClasses("primary", "sm")}>
           Cargar cartola
         </Link>
       }
     >
-      <AccountBalancesPanel
-        accounts={accounts}
-        activity={activity}
-        totalBalance={totalBalance}
-      />
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-zinc-500">Total en cuentas</p>
+        <p className="text-lg font-semibold tabular-nums">
+          {formatCLP(totalBalance, { signed: true })}
+        </p>
+      </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
         {accounts.map((account) => {
           const act = activity.find((a) => a.account_id === account.id);
           return (
