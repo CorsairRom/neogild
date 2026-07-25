@@ -2,25 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOnboarded } from "@/lib/auth/session";
 import { AppShell } from "@/components/app-shell";
-import { formatCLP } from "@/lib/format";
+import { formatCLP, typeLabel } from "@/lib/format";
 import { getAccountMonthActivity, parseMonthParam } from "@neogild/core";
 
 export const dynamic = "force-dynamic";
-
-function typeLabel(type: string) {
-  switch (type) {
-    case "income":
-      return "Ingreso";
-    case "expense":
-      return "Egreso";
-    case "transfer":
-      return "Transferencia";
-    case "refund":
-      return "Reembolso";
-    default:
-      return type;
-  }
-}
 
 export default async function AccountDetailPage({
   params,
@@ -140,68 +125,109 @@ export default async function AccountDetailPage({
         </p>
       ) : null}
 
-      <div className="mt-6 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/80">
-            <tr>
-              <th className="px-4 py-3 font-medium">Fecha</th>
-              <th className="px-4 py-3 font-medium">Descripción</th>
-              <th className="px-4 py-3 font-medium">Tipo</th>
-              <th className="px-4 py-3 font-medium text-right">Monto</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(transactions ?? []).length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-12 text-center text-zinc-500">
-                  Sin movimientos este mes.
-                </td>
-              </tr>
-            ) : (
-              transactions!.map((tx) => {
-                const signed =
-                  tx.type === "expense"
-                    ? -tx.amount
-                    : tx.type === "transfer"
-                      ? tx.amount
-                      : tx.amount;
-                const peer =
-                  tx.transfer_to && accountNames.get(tx.transfer_to)
-                    ? accountNames.get(tx.transfer_to)
-                    : null;
-                return (
-                  <tr
-                    key={tx.id}
-                    className="border-b border-zinc-100 dark:border-zinc-800/80"
-                  >
-                    <td className="whitespace-nowrap px-4 py-3">
-                      {new Date(tx.date).toLocaleDateString("es-CL")}
-                    </td>
-                    <td className="max-w-xs truncate px-4 py-3">
-                      {tx.description ?? "—"}
-                      {peer && (
-                        <span className="ml-1 text-xs text-zinc-500">↔ {peer}</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-xs">{typeLabel(tx.type)}</td>
-                    <td
-                      className={`px-4 py-3 text-right tabular-nums ${
-                        signed > 0
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : signed < 0
-                            ? "text-rose-600 dark:text-rose-400"
-                            : ""
-                      }`}
+      {(transactions ?? []).length === 0 ? (
+        <div className="mt-6 rounded-xl border border-zinc-200 px-4 py-12 text-center text-zinc-500 dark:border-zinc-800">
+          Sin movimientos este mes.
+        </div>
+      ) : (
+        <>
+          <div className="mt-6 hidden overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 sm:block">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/80">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Fecha</th>
+                  <th className="px-4 py-3 font-medium">Descripción</th>
+                  <th className="px-4 py-3 font-medium">Tipo</th>
+                  <th className="px-4 py-3 font-medium text-right">Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactions!.map((tx) => {
+                  const signed =
+                    tx.type === "expense"
+                      ? -tx.amount
+                      : tx.type === "transfer"
+                        ? tx.amount
+                        : tx.amount;
+                  const peer =
+                    tx.transfer_to && accountNames.get(tx.transfer_to)
+                      ? accountNames.get(tx.transfer_to)
+                      : null;
+                  return (
+                    <tr
+                      key={tx.id}
+                      className="border-b border-zinc-100 dark:border-zinc-800/80"
                     >
-                      {formatCLP(signed, { signed: true })}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        {new Date(tx.date).toLocaleDateString("es-CL")}
+                      </td>
+                      <td className="max-w-xs truncate px-4 py-3">
+                        {tx.description ?? "—"}
+                        {peer && (
+                          <span className="ml-1 text-xs text-zinc-500">↔ {peer}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs">{typeLabel(tx.type)}</td>
+                      <td
+                        className={`px-4 py-3 text-right tabular-nums ${
+                          signed > 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : signed < 0
+                              ? "text-rose-600 dark:text-rose-400"
+                              : ""
+                        }`}
+                      >
+                        {formatCLP(signed, { signed: true })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-6 space-y-3 sm:hidden">
+            {transactions!.map((tx) => {
+              const signed =
+                tx.type === "expense"
+                  ? -tx.amount
+                  : tx.type === "transfer"
+                    ? tx.amount
+                    : tx.amount;
+              const peer =
+                tx.transfer_to && accountNames.get(tx.transfer_to)
+                  ? accountNames.get(tx.transfer_to)
+                  : null;
+              return (
+                <div
+                  key={tx.id}
+                  className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"
+                >
+                  <div className="flex items-center justify-between text-xs text-zinc-500">
+                    <span>{new Date(tx.date).toLocaleDateString("es-CL")}</span>
+                    <span>{typeLabel(tx.type)}</span>
+                  </div>
+                  <p className="mt-1 truncate font-medium">
+                    {tx.description ?? "—"}
+                    {peer && <span className="ml-1 text-xs text-zinc-500">↔ {peer}</span>}
+                  </p>
+                  <p
+                    className={`mt-1 text-right font-semibold tabular-nums ${
+                      signed > 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : signed < 0
+                          ? "text-rose-600 dark:text-rose-400"
+                          : ""
+                    }`}
+                  >
+                    {formatCLP(signed, { signed: true })}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
     </AppShell>
   );
 }

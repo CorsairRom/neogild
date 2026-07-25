@@ -34,6 +34,50 @@ function statusBadge(status: string) {
   );
 }
 
+type Movement = {
+  id: string;
+  status: string;
+  email_date: string | null;
+  source: string;
+  merchant: string | null;
+  counterparty: string | null;
+  amount: number | null;
+  error_detail: string | null;
+  attachment_path: string | null;
+  raw_snippet: string | null;
+};
+
+function MovementDetail({ m, hasRut }: { m: Movement; hasRut: boolean }) {
+  if (m.status === "error" && m.error_detail) {
+    return <span className="text-red-600 dark:text-red-400">{m.error_detail}</span>;
+  }
+  if (m.status === "pending_attachment" && m.attachment_path) {
+    return hasRut ? (
+      <Link
+        href={`/cartolas/${m.id}`}
+        className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+      >
+        Ver cartola
+      </Link>
+    ) : (
+      <Link
+        href="/settings"
+        className="font-medium text-amber-600 hover:underline dark:text-amber-400"
+      >
+        Configurar RUT
+      </Link>
+    );
+  }
+  if (m.status === "pending_attachment") {
+    return (
+      <span className="text-amber-600 dark:text-amber-400">
+        {m.error_detail ?? "Sin adjunto"}
+      </span>
+    );
+  }
+  return <>{m.raw_snippet?.slice(0, 80) ?? "—"}</>;
+}
+
 export default async function InboxPage() {
   const { supabase, user } = await requireOnboarded();
 
@@ -88,77 +132,83 @@ export default async function InboxPage() {
         </p>
       )}
 
-      <div className="mt-6 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/80">
-            <tr>
-              <th className="px-4 py-3 font-medium">Estado</th>
-              <th className="px-4 py-3 font-medium">Fecha</th>
-              <th className="px-4 py-3 font-medium">Fuente</th>
-              <th className="px-4 py-3 font-medium">Merchant</th>
-              <th className="px-4 py-3 font-medium text-right">Monto</th>
-              <th className="px-4 py-3 font-medium">Detalle</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(movements ?? []).length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-zinc-500">
-                  Sin correos. Conectá IMAP y ejecutá sync desde el dashboard.
-                </td>
-              </tr>
-            ) : (
-              movements!.map((m) => (
-                <tr
-                  key={m.id}
-                  className="border-b border-zinc-100 dark:border-zinc-800/80"
-                >
-                  <td className="px-4 py-3">{statusBadge(m.status)}</td>
-                  <td className="whitespace-nowrap px-4 py-3">
+      {(movements ?? []).length === 0 ? (
+        <div className="mt-6 rounded-xl border border-zinc-200 px-4 py-12 text-center text-zinc-500 dark:border-zinc-800">
+          Sin correos. Conectá IMAP y ejecutá sync desde el dashboard.
+        </div>
+      ) : (
+        <>
+          <div className="mt-6 hidden overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 sm:block">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/80">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Estado</th>
+                  <th className="px-4 py-3 font-medium">Fecha</th>
+                  <th className="px-4 py-3 font-medium">Fuente</th>
+                  <th className="px-4 py-3 font-medium">Merchant</th>
+                  <th className="px-4 py-3 font-medium text-right">Monto</th>
+                  <th className="px-4 py-3 font-medium">Detalle</th>
+                </tr>
+              </thead>
+              <tbody>
+                {movements!.map((m) => (
+                  <tr
+                    key={m.id}
+                    className="border-b border-zinc-100 dark:border-zinc-800/80"
+                  >
+                    <td className="px-4 py-3">{statusBadge(m.status)}</td>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {m.email_date
+                        ? new Date(m.email_date).toLocaleDateString("es-CL")
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs">{m.source}</td>
+                    <td className="max-w-[12rem] truncate px-4 py-3">
+                      {m.merchant ?? m.counterparty ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {formatCLP(m.amount)}
+                    </td>
+                    <td className="max-w-xs truncate px-4 py-3 text-xs text-zinc-500">
+                      <MovementDetail m={m} hasRut={hasRut} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-6 space-y-3 sm:hidden">
+            {movements!.map((m) => (
+              <div
+                key={m.id}
+                className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  {statusBadge(m.status)}
+                  <span className="text-xs text-zinc-500">
                     {m.email_date
                       ? new Date(m.email_date).toLocaleDateString("es-CL")
                       : "—"}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs">{m.source}</td>
-                  <td className="max-w-[12rem] truncate px-4 py-3">
-                    {m.merchant ?? m.counterparty ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
+                  </span>
+                </div>
+                <p className="mt-2 truncate font-medium">
+                  {m.merchant ?? m.counterparty ?? "—"}
+                </p>
+                <div className="mt-1 flex items-center justify-between gap-2 text-xs text-zinc-500">
+                  <span className="font-mono">{m.source}</span>
+                  <span className="tabular-nums text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                     {formatCLP(m.amount)}
-                  </td>
-                  <td className="max-w-xs truncate px-4 py-3 text-xs text-zinc-500">
-                    {m.status === "error" && m.error_detail ? (
-                      <span className="text-red-600 dark:text-red-400">{m.error_detail}</span>
-                    ) : m.status === "pending_attachment" && m.attachment_path ? (
-                      hasRut ? (
-                        <Link
-                          href={`/cartolas/${m.id}`}
-                          className="font-medium text-blue-600 hover:underline dark:text-blue-400"
-                        >
-                          Ver cartola
-                        </Link>
-                      ) : (
-                        <Link
-                          href="/settings"
-                          className="font-medium text-amber-600 hover:underline dark:text-amber-400"
-                        >
-                          Configurar RUT
-                        </Link>
-                      )
-                    ) : m.status === "pending_attachment" ? (
-                      <span className="text-amber-600 dark:text-amber-400">
-                        {m.error_detail ?? "Sin adjunto"}
-                      </span>
-                    ) : (
-                      m.raw_snippet?.slice(0, 80) ?? "—"
-                    )}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+                  </span>
+                </div>
+                <div className="mt-2 truncate text-xs text-zinc-500">
+                  <MovementDetail m={m} hasRut={hasRut} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </AppShell>
   );
 }

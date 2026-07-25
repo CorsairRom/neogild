@@ -5,6 +5,22 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 
+const AUTH_ERROR_TRANSLATIONS: Array<[RegExp, string]> = [
+  [/invalid login credentials/i, "Email o contraseña incorrectos."],
+  [/user already registered/i, "Ya existe una cuenta con ese email."],
+  [/password should be at least/i, "La contraseña debe tener al menos 6 caracteres."],
+  [/unable to validate email address/i, "El formato del email no es válido."],
+  [/email not confirmed/i, "Confirmá tu email antes de iniciar sesión."],
+  [/rate limit/i, "Demasiados intentos. Esperá un momento y volvé a intentar."],
+];
+
+function translateAuthError(message: string): string {
+  for (const [pattern, translation] of AUTH_ERROR_TRANSLATIONS) {
+    if (pattern.test(message)) return translation;
+  }
+  return "No se pudo completar la operación. Intentá de nuevo.";
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -27,7 +43,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (authError) {
-      setError(authError.message);
+      setError(translateAuthError(authError.message));
       return;
     }
 

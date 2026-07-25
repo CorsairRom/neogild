@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { typeLabel } from "@/lib/format";
 
 type Category = { id: string; name: string; parent_id: string | null };
 type ReviewTx = {
@@ -21,21 +22,6 @@ function formatCLP(amount: number) {
     currency: "CLP",
     maximumFractionDigits: 0,
   }).format(Math.abs(amount));
-}
-
-function typeLabel(type: string) {
-  switch (type) {
-    case "income":
-      return "Ingreso";
-    case "expense":
-      return "Egreso";
-    case "transfer":
-      return "Transferencia";
-    case "refund":
-      return "Reembolso";
-    default:
-      return type;
-  }
 }
 
 function typeBadgeClass(type: string) {
@@ -59,6 +45,29 @@ async function patchCategory(id: string, category: string) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error ?? "Error");
+}
+
+function useReviewRowState(tx: ReviewTx, onSaved: () => void) {
+  const [category, setCategory] = useState(tx.category ?? "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!category) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await patchCategory(tx.id, category);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return { category, setCategory, loading, error, handleSave };
 }
 
 export function ReviewTransactionsTable({
@@ -167,7 +176,7 @@ export function ReviewTransactionsTable({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+      <div className="hidden overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 sm:block">
         <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/80">
             <tr>
@@ -201,6 +210,19 @@ export function ReviewTransactionsTable({
           </tbody>
         </table>
       </div>
+
+      <div className="space-y-3 sm:hidden">
+        {rows.map((tx) => (
+          <ReviewTransactionCard
+            key={tx.id}
+            tx={tx}
+            categories={categories}
+            selected={selected.has(tx.id)}
+            onToggleSelect={() => toggleSelect(tx.id)}
+            onSaved={() => handleRowSaved(tx.id)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -218,26 +240,8 @@ function ReviewTransactionRow({
   onToggleSelect: () => void;
   onSaved: () => void;
 }) {
-  const [category, setCategory] = useState(tx.category ?? "");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
+  const { category, setCategory, loading, error, handleSave } = useReviewRowState(tx, onSaved);
   const leafCategories = categories.filter((c) => c.parent_id !== null);
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    if (!category) return;
-    setLoading(true);
-    setError(null);
-    try {
-      await patchCategory(tx.id, category);
-      onSaved();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   return (
     <tr className="border-b border-zinc-100 dark:border-zinc-800">
@@ -303,6 +307,89 @@ function ReviewTransactionRow({
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       </td>
     </tr>
+  );
+}
+
+function ReviewTransactionCard({
+  tx,
+  categories,
+  selected,
+  onToggleSelect,
+  onSaved,
+}: {
+  tx: ReviewTx;
+  categories: Category[];
+  selected: boolean;
+  onToggleSelect: () => void;
+  onSaved: () => void;
+}) {
+  const { category, setCategory, loading, error, handleSave } = useReviewRowState(tx, onSaved);
+  const leafCategories = categories.filter((c) => c.parent_id !== null);
+
+  return (
+    <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+      <div className="flex items-start justify-between gap-3">
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            aria-label={`Seleccionar ${tx.description ?? "transacción"}`}
+            className="mt-0.5"
+          />
+          <div>
+            <p className="font-medium">{tx.description ?? "—"}</p>
+            <p className="text-xs text-zinc-500">
+              {new Date(tx.date).toLocaleDateString("es-CL")} · {typeLabel(tx.type)}
+            </p>
+          </div>
+        </label>
+        <span
+          className={`shrink-0 font-semibold tabular-nums ${
+            tx.type === "income" ? "text-emerald-600 dark:text-emerald-400" : ""
+          }`}
+        >
+          {tx.type === "expense" ? "−" : tx.type === "income" ? "+" : ""}
+          {formatCLP(tx.amount)}
+        </span>
+      </div>
+
+      <div className="mt-2">
+        {tx.needs_review && tx.category ? (
+          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            revisar
+          </span>
+        ) : tx.category ? (
+          <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-800 dark:bg-green-950 dark:text-green-200">
+            ok
+          </span>
+        ) : (
+          <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800">
+            sin categoría
+          </span>
+        )}
+      </div>
+
+      <form onSubmit={handleSave} className="mt-3 flex flex-wrap items-center gap-2">
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="flex-1 rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          required
+        >
+          <option value="">Elegir…</option>
+          {leafCategories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <Button type="submit" size="sm" disabled={loading || !category}>
+          {loading ? "…" : "Guardar"}
+        </Button>
+      </form>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
   );
 }
 

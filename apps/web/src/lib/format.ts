@@ -15,3 +15,18 @@ export function formatMonthTitle(month: string) {
     new Date(y, m - 1, 1),
   )
 }
+
+export function typeLabel(type: string) {
+  switch (type) {
+    case 'income':
+      return 'Ingreso'
+    case 'expense':
+      return 'Egreso'
+    case 'transfer':
+      return 'Transferencia'
+    case 'refund':
+      return 'Reembolso'
+    default:
+      return type
+  }
+}

@@ -22,32 +22,38 @@ type SyncSummary = {
   };
 };
 
+function monthsAgoIso(months: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - months);
+  return d.toISOString().slice(0, 10);
+}
+
 function formatSyncSummary(data: SyncSummary): string {
   const parts = [
-    `Fetched ${data.fetched ?? 0}`,
-    `parsed ${data.parsed ?? 0}`,
-    `promoted ${data.promoted ?? 0}`,
-    `forwards ${data.forwards ?? 0}`,
+    `${data.fetched ?? 0} recibidos`,
+    `${data.parsed ?? 0} parseados`,
+    `${data.promoted ?? 0} promovidos`,
+    `${data.forwards ?? 0} reenvíos`,
   ];
   const promoteErrors = (data.errors ?? 0) - (data.staged_errors ?? 0);
   if ((data.staged_errors ?? 0) > 0) {
-    parts.push(`${data.staged_errors} parse errors`);
+    parts.push(`${data.staged_errors} errores de parseo`);
   }
   if (promoteErrors > 0) {
-    parts.push(`${promoteErrors} promote errors`);
+    parts.push(`${promoteErrors} errores al promover`);
   }
   if ((data.pending ?? 0) > 0) {
-    parts.push(`${data.pending} pending (USD rate)`);
+    parts.push(`${data.pending} pendientes (tipo de cambio USD)`);
   }
   if ((data.cartolas_staged ?? 0) > 0) {
     parts.push(`${data.cartolas_staged} cartolas`);
   }
   if ((data.cartola_imported ?? 0) > 0) {
-    parts.push(`${data.cartola_imported} cartola txs`);
+    parts.push(`${data.cartola_imported} movimientos de cartola`);
   }
   if (data.categorize) {
     parts.push(
-      `cat rules ${data.categorize.rule_matched ?? 0}, llm ${data.categorize.llm_matched ?? 0}`,
+      `categorización: ${data.categorize.rule_matched ?? 0} por reglas, ${data.categorize.llm_matched ?? 0} por LLM`,
     );
   }
   return parts.join(", ");
@@ -96,7 +102,7 @@ export function SyncButton({ since }: { since?: string }) {
   async function handleBackfill() {
     setBackfillLoading(true);
     try {
-      const data = await runSync({ since: "2026-01-01" });
+      const data = await runSync({ since: monthsAgoIso(6) });
       const cartola = (data as SyncSummary & { cartolas_staged?: number }).cartolas_staged ?? 0;
       if (cartola > 0) {
         const { movements: rows } = await fetch("/api/email-movements").then((r) => r.json()) as {
