@@ -10,10 +10,12 @@ export async function importCartolaLines(
   options: {
     userId: string;
     accountId: string;
-    gmailMessageId: string;
     lines: CartolaLine[];
     statementMonth: string;
     ownerName?: string | null;
+    /** Unique id for dedup fingerprints (gmail message id or manual upload id). */
+    importSourceId: string;
+    importSource?: "email" | "manual";
   },
 ): Promise<{ imported: number; skipped: number; ownerName: string | null }> {
   const inferred =
@@ -59,10 +61,12 @@ export async function importCartolaLines(
     }
 
     const isDeposit = line.deposit > 0;
+    const sourceLabel =
+      options.importSource === "manual" ? "manual_cartola" : "bancoestado_cartola";
     const metadata = {
-      source: "bancoestado_cartola",
+      source: sourceLabel,
       cartola_doc: line.doc,
-      gmail_message_id: options.gmailMessageId,
+      import_source_id: options.importSourceId,
       cartola_kind: cls.kind,
       counterparty: cls.counterparty,
     };
@@ -78,7 +82,7 @@ export async function importCartolaLines(
       currency: "CLP",
       entry_type: isDeposit ? "deposit" : "charge",
       status: "new",
-      upload_fingerprint: `cartola:${options.gmailMessageId}:${line.doc}`,
+      upload_fingerprint: `cartola:${options.importSourceId}:${line.doc}`,
     });
 
     const { error: txErr } = await admin.rpc("import_ledger_line", {

@@ -103,7 +103,8 @@ export async function POST(request: Request) {
             const result = await importCartolaLines(admin, {
               userId: user.id,
               accountId: account.id,
-              gmailMessageId: movement.gmail_message_id,
+              importSourceId: movement.gmail_message_id,
+              importSource: "email" as const,
               lines: parsed.lines,
               statementMonth,
               ownerName: profile.name,

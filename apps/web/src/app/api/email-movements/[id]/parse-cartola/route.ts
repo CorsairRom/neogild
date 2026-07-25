@@ -70,7 +70,8 @@ export async function POST(_request: Request, context: RouteContext) {
   const { imported, skipped } = await importCartolaLines(admin, {
     userId: user.id,
     accountId: account.id,
-    gmailMessageId: movement.gmail_message_id,
+    importSourceId: movement.gmail_message_id,
+    importSource: "email",
     lines: parsed.lines,
     statementMonth,
     ownerName: profile?.name,

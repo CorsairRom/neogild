@@ -77,6 +77,14 @@ export default async function AccountDetailPage({
         </Link>
       }
     >
+      <div className="mb-4">
+        <Link
+          href={`/accounts/upload?account=${id}`}
+          className="inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+        >
+          Cargar cartola PDF
+        </Link>
+      </div>
       <section className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
           <p className="text-xs text-zinc-500">Saldo</p>

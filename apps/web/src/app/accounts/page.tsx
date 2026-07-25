@@ -32,6 +32,14 @@ export default async function AccountsPage({
       userEmail={user.email ?? ""}
       title="Mis cuentas"
       description="Saldo actual por cuenta y transferencias entre tus bancos."
+      actions={
+        <Link
+          href="/accounts/upload"
+          className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          Cargar cartola
+        </Link>
+      }
     >
       <AccountBalancesPanel
         accounts={accounts}

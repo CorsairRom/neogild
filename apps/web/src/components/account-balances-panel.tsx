@@ -86,7 +86,10 @@ export function AccountBalancesPanel({
         })}
       </ul>
 
-      <Link href="/accounts" className="mt-3 inline-block text-xs text-zinc-500 underline">
+      <Link href="/accounts/upload" className="mt-3 inline-block text-xs text-zinc-500 underline">
+        Cargar cartola manualmente
+      </Link>
+      <Link href="/accounts" className="mt-3 ml-4 inline-block text-xs text-zinc-500 underline">
         Ver detalle por cuenta
       </Link>
     </section>
