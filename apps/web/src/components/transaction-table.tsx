@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { formatCLP } from "@/lib/format";
+import { Button } from "@/components/ui/button";
 
 type Category = { id: string; name: string; parent_id: string | null };
 
@@ -109,12 +110,7 @@ export function TransactionFilters({
           ))}
         </select>
       </label>
-      <button
-        type="submit"
-        className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900"
-      >
-        Filtrar
-      </button>
+      <Button type="submit">Filtrar</Button>
     </form>
   );
 }

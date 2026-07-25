@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 export function RutSettingsForm() {
   const [rut, setRut] = useState("");
@@ -97,13 +98,9 @@ export function RutSettingsForm() {
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={saving || !rut.trim()}
-        className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-      >
+      <Button type="submit" disabled={saving || !rut.trim()}>
         {saving ? "Guardando…" : "Guardar RUT"}
-      </button>
+      </Button>
     </form>
   );
 }

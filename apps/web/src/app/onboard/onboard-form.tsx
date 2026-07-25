@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import {
   CHILE_BANKS_OTHER,
   CHILE_BANKS_WITH_EMAIL,
@@ -442,13 +443,9 @@ export default function OnboardForm() {
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
         )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-md bg-zinc-900 py-2.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-        >
+        <Button type="submit" disabled={loading} className="w-full">
           {loading ? "Guardando…" : "Continuar → conectar correo"}
-        </button>
+        </Button>
       </form>
     </div>
   );

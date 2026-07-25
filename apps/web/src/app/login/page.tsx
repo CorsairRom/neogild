@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -71,13 +72,9 @@ export default function LoginPage() {
             <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-zinc-900 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-          >
+          <Button type="submit" disabled={loading} className="w-full">
             {loading ? "…" : isSignUp ? "Registrarse" : "Entrar"}
-          </button>
+          </Button>
         </form>
 
         <button

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 
 type SyncSummary = {
   fetched?: number;
@@ -118,22 +119,17 @@ export function SyncButton({ since }: { since?: string }) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={handleSync}
-          disabled={loading || backfillLoading}
-          className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-        >
+        <Button type="button" onClick={handleSync} disabled={loading || backfillLoading}>
           {loading ? "Sincronizando…" : since ? `Sync desde ${since}` : "Sync correos"}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="secondary"
           onClick={handleBackfill}
           disabled={loading || backfillLoading}
-          className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
         >
           {backfillLoading ? "Importando histórico…" : "Sync histórico + cartolas"}
-        </button>
+        </Button>
       </div>
       {result && <p className="text-sm text-green-700 dark:text-green-400">{result}</p>}
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
@@ -211,13 +207,9 @@ export function EmailConnectForm() {
       {success && (
         <p className="text-sm text-green-700 dark:text-green-400">Conectado.</p>
       )}
-      <button
-        type="submit"
-        disabled={loading}
-        className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-      >
+      <Button type="submit" disabled={loading}>
         {loading ? "Probando conexión…" : "Conectar IMAP"}
-      </button>
+      </Button>
     </form>
   );
 }
