@@ -79,6 +79,7 @@ export default async function DashboardPage({
         <StatCard
           label="Disponible"
           value={formatCLP(buckets.disponible, { signed: true })}
+          tone={buckets.disponible < 0 ? "warn" : "default"}
           hint="Ingresos − gastos del mes"
         />
         <StatCard
