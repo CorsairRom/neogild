@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppNav } from "@/components/app-nav";
+import { formatCLP } from "@/lib/format";
 
 type Account = {
   id: string;
   name: string;
   subtype: string;
+  balance: number;
   metadata: {
     card_last4?: string;
     card_currency?: string;
@@ -58,6 +60,9 @@ export default function AccountsSettingsPage() {
             >
               <p className="font-medium">{a.name}</p>
               <p className="text-xs text-zinc-500">{a.subtype}</p>
+              <p className="mt-1 text-sm font-semibold tabular-nums">
+                Saldo: {formatCLP(a.balance, { signed: true })}
+              </p>
               <dl className="mt-2 space-y-1 text-sm">
                 {a.metadata?.card_last4 && (
                   <div className="flex gap-2">

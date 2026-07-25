@@ -10,13 +10,16 @@ import {
   TrendLineChart,
 } from "@/components/dashboard/charts";
 import { SyncButton } from "@/components/gmail-sync";
+import { AccountBalancesPanel } from "@/components/account-balances-panel";
 import { formatCLP, formatMonthTitle } from "@/lib/format";
 import {
+  getAccountMonthActivity,
   getCategories,
   getCategoryBreakdown,
   getDailyExpenses,
   getMonthlyBuckets,
   getMonthlyTrend,
+  getPersonalAccountBalances,
   parseMonthParam,
 } from "@neogild/core";
 
@@ -35,7 +38,8 @@ export default async function DashboardPage({
   const categories = await getCategories(supabase, { entity: "personal" });
   const categoryLabels = new Map(categories.map((c) => [c.id, c.name]));
 
-  const [buckets, breakdown, daily, trend, reviewResult, syncResult] = await Promise.all([
+  const [buckets, breakdown, daily, trend, reviewResult, syncResult, accounts, accountActivity] =
+    await Promise.all([
     getMonthlyBuckets(supabase, { month }),
     getCategoryBreakdown(supabase, month, categoryLabels),
     getDailyExpenses(supabase, month),
@@ -46,6 +50,8 @@ export default async function DashboardPage({
       .or("category.is.null,needs_review.eq.true")
       .in("type", ["income", "expense", "refund"]),
     supabase.from("sync_state").select("gmail_watermark").maybeSingle(),
+    getPersonalAccountBalances(supabase),
+    getAccountMonthActivity(supabase, month),
   ]);
 
   const reviewCount = reviewResult.count ?? 0;
@@ -53,6 +59,8 @@ export default async function DashboardPage({
 
   const gastos =
     buckets.necesidades + buckets.consumo + buckets.ahorro + buckets.por_categorizar;
+
+  const totalAccountBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
 
   return (
     <AppShell
@@ -81,6 +89,12 @@ export default async function DashboardPage({
           hint={reviewCount > 0 ? "Revisar transacciones" : undefined}
         />
       </section>
+
+      <AccountBalancesPanel
+        accounts={accounts}
+        activity={accountActivity}
+        totalBalance={totalAccountBalance}
+      />
 
       <section className="mt-8 grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">

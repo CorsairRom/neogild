@@ -59,6 +59,13 @@ export async function importCartolaLines(
     }
 
     const isDeposit = line.deposit > 0;
+    const metadata = {
+      source: "bancoestado_cartola",
+      cartola_doc: line.doc,
+      gmail_message_id: options.gmailMessageId,
+      cartola_kind: cls.kind,
+      counterparty: cls.counterparty,
+    };
 
     await admin.from("statement_entries").insert({
       user_id: options.userId,
@@ -74,23 +81,18 @@ export async function importCartolaLines(
       upload_fingerprint: `cartola:${options.gmailMessageId}:${line.doc}`,
     });
 
-    const { error: txErr } = await admin.from("transactions").insert({
-      user_id: options.userId,
-      account_id: options.accountId,
-      type: cls.type,
-      amount,
-      description: line.description,
-      category: cls.category,
-      entity: "personal",
-      date: line.date,
-      needs_review: cls.needsReview,
-      metadata: {
-        source: "bancoestado_cartola",
-        cartola_doc: line.doc,
-        gmail_message_id: options.gmailMessageId,
-        cartola_kind: cls.kind,
-        counterparty: cls.counterparty,
-      },
+    const { error: txErr } = await admin.rpc("import_ledger_line", {
+      p_user_id: options.userId,
+      p_account_id: options.accountId,
+      p_date: line.date,
+      p_description: line.description,
+      p_amount: amount,
+      p_tx_type: cls.type,
+      p_category: cls.category,
+      p_needs_review: cls.needsReview,
+      p_metadata: metadata,
+      p_cartola_kind: cls.kind === "tef_own" ? "tef_own" : null,
+      p_is_deposit: isDeposit,
     });
 
     if (!txErr) imported++;
