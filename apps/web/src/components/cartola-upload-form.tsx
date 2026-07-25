@@ -110,9 +110,14 @@ export function CartolaUploadForm({
           type="file"
           accept="application/pdf,.pdf"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-md file:border-0 file:bg-zinc-100 file:px-3 file:py-2 file:text-sm file:font-medium dark:text-zinc-400 dark:file:bg-zinc-800"
+          className="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-md file:border file:border-zinc-300 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-zinc-900 hover:file:bg-zinc-50 dark:text-zinc-400 dark:file:border-zinc-600 dark:file:bg-zinc-800 dark:file:text-zinc-100 dark:hover:file:bg-zinc-700"
           required
         />
+        {file && (
+          <p className="text-xs text-emerald-600 dark:text-emerald-400">
+            Archivo listo: {file.name}
+          </p>
+        )}
         <p className="text-xs text-zinc-500">
           PDF encriptado con los últimos 4 dígitos de tu RUT (BancoEstado CuentaRUT, Banco de
           Chile CC, etc.).
@@ -122,7 +127,7 @@ export function CartolaUploadForm({
       <button
         type="submit"
         disabled={loading || !file || !accountId}
-        className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+        className="rounded-md px-4 py-2 text-sm font-semibold transition enabled:bg-zinc-900 enabled:text-white enabled:shadow-sm enabled:hover:bg-zinc-800 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:enabled:bg-white dark:enabled:text-zinc-900 dark:enabled:hover:bg-zinc-100 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
       >
         {loading ? "Importando…" : "Importar cartola"}
       </button>
