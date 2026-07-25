@@ -16,7 +16,7 @@ export default async function ReviewPage() {
     <AppShell
       userEmail={user.email ?? ""}
       title="Por categorizar"
-      description="Confirmá o corregí categorías. Al guardar se crea una regla para el merchant."
+      description="El tipo (ingreso/egreso) ya viene del banco. Acá solo confirmás la categoría del gasto."
     >
       <CategorizeButton />
 
@@ -27,6 +27,7 @@ export default async function ReviewPage() {
               <th className="px-4 py-3 font-medium">Fecha</th>
               <th className="px-4 py-3 font-medium">Descripción</th>
               <th className="px-4 py-3 font-medium text-right">Monto</th>
+              <th className="px-4 py-3 font-medium">Tipo</th>
               <th className="px-4 py-3 font-medium">Estado</th>
               <th className="px-4 py-3 font-medium">Categoría</th>
             </tr>
@@ -34,7 +35,7 @@ export default async function ReviewPage() {
           <tbody>
             {transactions.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-zinc-500">
+                <td colSpan={6} className="px-4 py-12 text-center text-zinc-500">
                   Todo categorizado.
                 </td>
               </tr>

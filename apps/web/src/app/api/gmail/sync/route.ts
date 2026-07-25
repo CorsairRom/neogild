@@ -52,7 +52,80 @@ export async function POST(request: Request) {
     const { runBatchCategorization } = await import('@/lib/categorization/pipeline')
     const categorize = await runBatchCategorization(admin, user.id)
 
-    return NextResponse.json({ ...summary, categorize })
+    let cartola_imported = 0
+    if ((summary.cartolas_staged ?? 0) > 0) {
+      const { data: profile } = await admin
+        .from('profiles')
+        .select('rut, name')
+        .eq('id', user.id)
+        .single()
+
+      const { data: pendingCartolas } = await admin
+        .from('email_movements')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('source', 'bancoestado_cartola')
+        .eq('status', 'pending_attachment')
+        .not('attachment_path', 'is', null)
+
+      const { parseCartolaPdfBuffer } = await import('@/lib/cartola/pdf')
+      const { importCartolaLines } = await import('@/lib/cartola/import')
+
+      const { data: account } = await admin
+        .from('accounts')
+        .select('id')
+        .eq('user_id', user.id)
+        .ilike('name', '%cuentarut%')
+        .eq('is_archived', false)
+        .maybeSingle()
+
+      if (profile?.rut && account) {
+        for (const row of pendingCartolas ?? []) {
+          const { data: movement } = await admin
+            .from('email_movements')
+            .select('id, attachment_path, gmail_message_id')
+            .eq('id', row.id)
+            .single()
+          if (!movement?.attachment_path) continue
+
+          const { data: file } = await admin.storage
+            .from('email-attachments')
+            .download(movement.attachment_path)
+          if (!file) continue
+
+          try {
+            const parsed = await parseCartolaPdfBuffer(await file.arrayBuffer(), profile.rut)
+            const statementMonth =
+              parsed.meta.to?.slice(0, 7) ??
+              parsed.meta.issuedAt?.slice(0, 7) ??
+              '2026-07'
+
+            const result = await importCartolaLines(admin, {
+              userId: user.id,
+              accountId: account.id,
+              gmailMessageId: movement.gmail_message_id,
+              lines: parsed.lines,
+              statementMonth,
+              ownerName: profile.name,
+            })
+            cartola_imported += result.imported
+
+            await admin
+              .from('email_movements')
+              .update({
+                status: 'promoted',
+                error_detail: null,
+                raw_snippet: `Cartola importada: ${parsed.lines.length} movimientos (${result.imported} nuevos, ${result.skipped} duplicados)`,
+              })
+              .eq('id', movement.id)
+          } catch (err) {
+            console.error('cartola import', movement.id, err)
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({ ...summary, categorize, cartola_imported })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'sync failed'
     return NextResponse.json({ error: message }, { status: 502 })

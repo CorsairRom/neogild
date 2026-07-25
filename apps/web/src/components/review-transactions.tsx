@@ -13,6 +13,34 @@ function formatCLP(amount: number) {
   }).format(Math.abs(amount));
 }
 
+function typeLabel(type: string) {
+  switch (type) {
+    case "income":
+      return "Ingreso";
+    case "expense":
+      return "Egreso";
+    case "transfer":
+      return "Transferencia";
+    case "refund":
+      return "Reembolso";
+    default:
+      return type;
+  }
+}
+
+function typeBadgeClass(type: string) {
+  switch (type) {
+    case "income":
+      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200";
+    case "expense":
+      return "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200";
+    case "transfer":
+      return "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200";
+    default:
+      return "bg-zinc-100 text-zinc-600 dark:bg-zinc-800";
+  }
+}
+
 export function ReviewTransactionRow({
   tx,
   categories,
@@ -62,11 +90,27 @@ export function ReviewTransactionRow({
         {new Date(tx.date).toLocaleDateString("es-CL")}
       </td>
       <td className="px-3 py-2">{tx.description ?? "—"}</td>
-      <td className="px-3 py-2 tabular-nums">{formatCLP(tx.amount)}</td>
+      <td className="px-3 py-2 tabular-nums">
+        <span className={tx.type === "income" ? "text-emerald-600 dark:text-emerald-400" : ""}>
+          {tx.type === "expense" ? "−" : tx.type === "income" ? "+" : ""}
+          {formatCLP(tx.amount)}
+        </span>
+      </td>
+      <td className="px-3 py-2">
+        <span
+          className={`rounded px-2 py-0.5 text-xs font-medium ${typeBadgeClass(tx.type)}`}
+        >
+          {typeLabel(tx.type)}
+        </span>
+      </td>
       <td className="px-3 py-2">
         {tx.needs_review && tx.category ? (
           <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
             revisar
+          </span>
+        ) : tx.category ? (
+          <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-800 dark:bg-green-950 dark:text-green-200">
+            ok
           </span>
         ) : (
           <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800">

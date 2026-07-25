@@ -35,6 +35,14 @@ export {
   shouldNeedsReview,
   CONFIDENCE_AUTO,
 } from './categorize'
+export {
+  classifyCartolaLine,
+  inferOwnerNameFromDescriptions,
+  matchMerchantCategory,
+  normalizePersonName,
+  personNamesMatch,
+} from './cartola-classify'
+export type { CartolaClassification, CartolaLineKind } from './cartola-classify'
 export type { GmailSyncSummary } from './sync'
 export {
   getCategoryBreakdown,
