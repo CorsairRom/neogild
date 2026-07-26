@@ -517,6 +517,9 @@ export function parseBancoEstadoTransfer(email: RawEmail): ParsedMovement | null
   )
 
   const accountRaw = matchGroup(text, accountRe)
+  const destRaw = isOut
+    ? matchGroup(text, /hacia:[\s\S]*?n[°º] de cuenta\s*:\s*(\d+)/i)
+    : null
   const tef = matchGroup(text, /n[°º] de tef\s*:\s*(\d+)/i)
   const fecha = matchGroup(text, /fecha y hora de tef\s*:\s*(\d{2}\/\d{2}\/\d{4})/i)
   const hora = matchGroup(text, /fecha y hora de tef\s*:\s*\d{2}\/\d{2}\/\d{4}\s*(\d{2}:\d{2}:\d{2})/i)
@@ -525,6 +528,7 @@ export function parseBancoEstadoTransfer(email: RawEmail): ParsedMovement | null
     amount,
     counterparty: matchGroup(text, counterpartyRe),
     account_hint: accountRaw !== null ? normalizeAccountNumber(accountRaw) : null,
+    dest_hint: destRaw !== null ? normalizeAccountNumber(destRaw) : null,
     email_date: bodyDateToIso(fecha, hora, email.date),
     bank_tx_id: tef !== null ? `TEF_${tef}` : null,
   })
