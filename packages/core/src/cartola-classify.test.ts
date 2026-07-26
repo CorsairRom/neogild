@@ -21,6 +21,20 @@ describe('classifyCartolaLine', () => {
     expect(r.kind).toBe('tef_own')
   })
 
+  it('TRASPASO A propia → transferencia; DE HELIGRAFICS → sueldo', () => {
+    const own = classifyCartolaLine('TRASPASO A:Richard Alexis Romero', 0, 50000, OWNER)
+    expect(own.type).toBe('transfer')
+    expect(own.kind).toBe('tef_own')
+    const salary = classifyCartolaLine('TRASPASO DE:HELIGRAFICS CHILE SPA', 1909624, 0, OWNER)
+    expect(salary.type).toBe('income')
+    expect(salary.category).toBe('ingreso.sueldo')
+  })
+
+  it('PAGO: con abono → ingreso (no gasto)', () => {
+    const r = classifyCartolaLine('PAGO:PROVEEDORES 0990030006', 17216, 0, OWNER)
+    expect(r.type).toBe('income')
+  })
+
   it('TEF A tercero → egreso transferencia', () => {
     const r = classifyCartolaLine('TEF A MIGUEL ANGEL VALENZUELA VALEN', 0, 16000, OWNER)
     expect(r.type).toBe('expense')

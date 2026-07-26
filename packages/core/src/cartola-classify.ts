@@ -87,6 +87,26 @@ export function inferOwnerNameFromDescriptions(descriptions: string[]): string |
   return best
 }
 
+/** Strip trailing account suffixes like " 10" before name matching. */
+export function counterpartyForMatch(name: string): string {
+  return name.replace(/\s+\d{1,4}$/, '').trim()
+}
+
+function ownTransfer(
+  counterparty: string,
+  ownerName?: string | null,
+): CartolaClassification | null {
+  if (!ownerName) return null
+  if (!personNamesMatch(counterpartyForMatch(counterparty), ownerName)) return null
+  return {
+    type: 'transfer',
+    category: null,
+    needsReview: false,
+    kind: 'tef_own',
+    counterparty,
+  }
+}
+
 export function classifyCartolaLine(
   description: string,
   deposit: number,
@@ -99,41 +119,59 @@ export function classifyCartolaLine(
   const tefIn = desc.match(/^TEF DE\s+(.+)/i)
   if (tefIn) {
     const counterparty = tefIn[1].trim()
-    if (ownerName && personNamesMatch(counterparty, ownerName)) {
-      return {
-        type: 'transfer',
-        category: null,
+    return (
+      ownTransfer(counterparty, ownerName) ?? {
+        type: 'income',
+        category: 'ingreso.otro',
         needsReview: false,
-        kind: 'tef_own',
+        kind: 'tef_in',
         counterparty,
       }
-    }
-    return {
-      type: 'income',
-      category: 'ingreso.otro',
-      needsReview: false,
-      kind: 'tef_in',
-      counterparty,
-    }
+    )
   }
 
   const tefOut = desc.match(/^TEF A\s+(.+)/i)
   if (tefOut) {
     const counterparty = tefOut[1].trim()
-    if (ownerName && personNamesMatch(counterparty, ownerName)) {
-      return {
-        type: 'transfer',
-        category: null,
+    return (
+      ownTransfer(counterparty, ownerName) ?? {
+        type: 'expense',
+        category: 'consumo.transferencia',
         needsReview: false,
-        kind: 'tef_own',
+        kind: 'tef_out',
         counterparty,
       }
-    }
+    )
+  }
+
+  // Banco de Chile: TRASPASO A:/DE:
+  const traspasoOut = desc.match(/^TRASPASO A:\s*(.+)/i)
+  if (traspasoOut) {
+    const counterparty = traspasoOut[1].trim()
+    return (
+      ownTransfer(counterparty, ownerName) ?? {
+        type: 'expense',
+        category: /capponi|arriendo/i.test(counterparty)
+          ? 'necesidad.arriendo'
+          : 'consumo.transferencia',
+        needsReview: !/capponi|arriendo/i.test(counterparty),
+        kind: 'tef_out',
+        counterparty,
+      }
+    )
+  }
+
+  const traspasoIn = desc.match(/^TRASPASO DE:\s*(.+)/i)
+  if (traspasoIn) {
+    const counterparty = traspasoIn[1].trim()
+    const own = ownTransfer(counterparty, ownerName)
+    if (own) return own
+    const isSalary = /heligrafics/i.test(counterparty)
     return {
-      type: 'expense',
-      category: 'consumo.transferencia',
-      needsReview: false,
-      kind: 'tef_out',
+      type: 'income',
+      category: isSalary ? 'ingreso.sueldo' : 'ingreso.otro',
+      needsReview: !isSalary,
+      kind: 'tef_in',
       counterparty,
     }
   }
@@ -148,23 +186,55 @@ export function classifyCartolaLine(
     }
   }
 
-  if (/^PAGO\s/i.test(upper)) {
-    const category = matchMerchantCategory(desc)
+  if (/^PAGO\s*DE\s*CREDITOS/i.test(upper)) {
     return {
       type: 'expense',
-      category,
-      needsReview: category === null,
+      category: 'deuda.cuota',
+      needsReview: false,
       kind: 'pago',
       counterparty: null,
     }
   }
 
+  if (/^PAC\s/i.test(upper) || /METLIFE|SEGURO/i.test(upper)) {
+    return {
+      type: 'expense',
+      category: 'necesidad.salud',
+      needsReview: false,
+      kind: 'pago',
+      counterparty: null,
+    }
+  }
+
+  if (/^COMISION/i.test(upper)) {
+    return {
+      type: 'expense',
+      category: 'necesidad.servicios',
+      needsReview: false,
+      kind: 'cargo',
+      counterparty: null,
+    }
+  }
+
+  // Deposit wins over PAGO* label (e.g. BCH "PAGO:PROVEEDORES" refund/abono).
   if (/^ABONO/i.test(upper) || deposit > 0) {
     return {
       type: 'income',
       category: 'ingreso.otro',
       needsReview: false,
       kind: deposit > 0 ? 'abono' : 'other',
+      counterparty: null,
+    }
+  }
+
+  // Banco Chile "PAGO:Spotify …" or BancoEstado "PAGO JUMBO …"
+  if (/^PAGO[:\s]/i.test(upper)) {
+    const category = matchMerchantCategory(desc)
+    return {
+      type: 'expense',
+      category,
+      needsReview: category === null,
+      kind: 'pago',
       counterparty: null,
     }
   }

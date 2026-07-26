@@ -39,6 +39,7 @@ export {
 } from './categorize'
 export {
   classifyCartolaLine,
+  counterpartyForMatch,
   inferOwnerNameFromDescriptions,
   matchMerchantCategory,
   normalizePersonName,
