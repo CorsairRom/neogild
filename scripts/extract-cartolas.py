@@ -239,75 +239,16 @@ def extract_banco_estado() -> list[dict]:
 
 
 def extract_falabella() -> list[dict]:
-    docs = []
-    for path in sorted((CARTOLAS / "banco_falabella").glob("*.pdf")):
-        text = subprocess.check_output(
-            ["pdftotext", "-layout", str(path), "-"],
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
-        billing = re.search(r"Fecha Facturación Estado de Cuenta:\s+(\d{2}/\d{2}/\d{4})", text)
-        total = re.search(r"Monto Total Facturado a Pagar\s+\$?([\d.]+)", text)
-        minimum = re.search(r"Monto mínimo a pagar\s+\$?([\d.]+)", text, re.I)
-        # Cupo Total* / Cupo Utilizado / Cupo Disponible (first data row)
-        cupo_m = re.search(
-            r"Cupo Total\*\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)",
-            text,
-        )
-        cupo_total = parse_clp(cupo_m.group(1)) if cupo_m else None
-        cupo_utilizado = parse_clp(cupo_m.group(2)) if cupo_m else None
-        cupo_disponible = parse_clp(cupo_m.group(3)) if cupo_m else None
-        payments = []
-        for m in re.finditer(
-            r"(\d{2}/\d{2}/\d{4})\s+Pago tarjeta cmr\s+T\s+(-?[\d.]+)",
-            text,
-            re.I,
-        ):
-            day, month, year = m.group(1).split("/")
-            amt = abs(parse_clp(m.group(2)))
-            if amt <= 1:
-                continue
-            payments.append({
-                "date": f"{year}-{month}-{day}",
-                "amount": amt,
-                "description": "Pago tarjeta CMR",
-            })
-
-        purchases = []
-        for m in re.finditer(
-            r"([A-Za-zÁÉÍÓÚÑáéíóúñ .]+?)\s+(\d{2}/\d{2}/\d{4})\s+(.+?)\s+T\s+([\d.]+)\s+([\d.]+)",
-            text,
-        ):
-            day, month, year = m.group(2).split("/")
-            merchant = m.group(3).strip()
-            if re.search(r"Pago tarjeta|Impuesto|Servicio admin|seg desgravamen", merchant, re.I):
-                continue
-            amount = parse_clp(m.group(4))
-            if amount <= 0:
-                continue
-            purchases.append({
-                "date": f"{year}-{month}-{day}",
-                "description": f"CMR {merchant}",
-                "charge": amount,
-                "deposit": 0,
-                "doc": f"cmr-{path.stem}-{m.start()}",
-            })
-
-        docs.append({
-            "bank": "banco_falabella",
-            "file": path.name,
-            "billing_date": (
-                f"{billing.group(1).split('/')[2]}-{billing.group(1).split('/')[1]}-{billing.group(1).split('/')[0]}"
-                if billing else None
-            ),
-            "total_due": parse_clp(total.group(1)) if total else None,
-            "minimum_due": parse_clp(minimum.group(1)) if minimum else None,
-            "cupo_total": cupo_total,
-            "cupo_utilizado": cupo_utilizado,
-            "cupo_disponible": cupo_disponible,
-            "payments": payments,
-            "purchases": purchases,
-        })
+    """Delegate to @neogild/core parseFalabellaCmrText (single source of truth)."""
+    raw = subprocess.check_output(
+        ["npx", "tsx", str(ROOT / "scripts" / "extract-falabella-cmr.mjs")],
+        cwd=str(ROOT),
+        text=True,
+    )
+    docs = json.loads(raw)
+    bad = [d["file"] for d in docs if not d.get("parse_ok")]
+    if bad:
+        print(f"  ⚠ Falabella parse_ok=false: {', '.join(bad)}", file=sys.stderr)
     return docs
 
 
@@ -350,7 +291,12 @@ def main() -> int:
     print(f"Wrote {OUT}")
     print(f"  BCH docs={len(payload['banco_chile'])} lines={bch_n}")
     print(f"  BE  docs={len(payload['banco_estado'])} lines={be_n}")
-    print(f"  Falabella docs={len(payload['banco_falabella'])}")
+    fal_n = sum(len(d.get("lines") or []) for d in payload["banco_falabella"])
+    fal_ok = sum(1 for d in payload["banco_falabella"] if d.get("parse_ok"))
+    print(
+        f"  Falabella docs={len(payload['banco_falabella'])} "
+        f"lines={fal_n} parse_ok={fal_ok}/{len(payload['banco_falabella'])}"
+    )
     print(f"  Liquidaciones={len(payload['liquidaciones'])}")
     return 0
 

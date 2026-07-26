@@ -46,6 +46,19 @@ export {
   personNamesMatch,
 } from './cartola-classify'
 export type { CartolaClassification, CartolaLineKind } from './cartola-classify'
+export {
+  parseFalabellaCmrText,
+  isFalabellaCmrStatementText,
+  parseClpAmount,
+  FALABELLA_CMR_CLOSE_TOLERANCE,
+} from './parsers/falabella-cmr'
+export type {
+  FalabellaCmrStatement,
+  FalabellaCmrLine,
+  FalabellaCmrLineKind,
+  FalabellaCmrSection,
+  FalabellaCmrPreviousPeriod,
+} from './parsers/falabella-cmr'
 export type { GmailSyncSummary } from './sync'
 export {
   getCategoryBreakdown,

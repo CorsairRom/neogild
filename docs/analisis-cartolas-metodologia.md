@@ -124,38 +124,38 @@ Fecha       N° Operación  Descripción              Abonos      Cargos     Sal
 
 ### 2.3 Banco Falabella — CMR (PDF)
 
-**Archivo**: `.pdf` sin contraseña (estado de cuenta de tarjeta de crédito).
+**Archivo**: `.pdf` sin contraseña (estado de cuenta de tarjeta de crédito).  
+**Parser canónico**: `packages/core/src/parsers/falabella-cmr.ts` (`parseFalabellaCmrText`).  
+**Extracción batch**: `pdftotext -layout` → ese parser (vía `scripts/extract-falabella-cmr.mjs`).
 
-**Extracción**:
 ```bash
 pdftotext -layout estado_cuenta.pdf -
 ```
 
-**Estructura del texto extraído**:
+**Estructura típica (3 hojas, parsear por SECCIONES no por nº de página):**
+
+| Hoja | Contenido |
+|---|---|
+| 1 | Titular, Cupón de pago (RUT), Contrato `999910******NNNN`, Fecha Facturación, RESUMEN (total/mínimo/pagar hasta), Cupos, tasas, **Período Facturado**, **1. PERÍODO ANTERIOR** (facturado/pagado/saldo), arranque **2.1** (FALABELLA / HOMECENTER / TOTTUS / PAT) |
+| 2 | **COMPRAS NACIONALES** |
+| 3 | **COMPRAS INTERNACIONALES**, OTROS, **2.2** seguros, **2.3** cargos/impuestos/**Pago tarjeta cmr**, III información de pago |
+
+**Columnas de compra (crítico):**
 ```
-Nombre del Titular:    RICHARD ALEXIS ROMERO MOORE
-N° de Contrato:        999910******5567
-Fecha Facturación:     24/06/2026
-
-RESUMEN DE PAGO
-Monto Total Facturado a Pagar    $479.140
-Monto mínimo a pagar             $85.550
-Pagar Hasta                      10/07/2026
-
-Cupo Total       Cupo Utilizado     Cupo Disponible
-1.100.000        1.138.565          0
-
-PERÍODO ACTUAL — Total Operaciones
-FALABELLA
-23/09/2025  Falabella.com    T  582.880  703.498  09/12  nov-2025  58.624
+ciudad | fecha | comercio | T | monto_compra | monto_total_cuota | n/n | mes_inicio | cuota_mensual
 ```
+- Lo **facturado este ciclo** = `cuota_mensual` (última columna), **NO** `monto_compra`.
+- Incluir **todas** las cuotas del estado (también compras antiguas en cuotas); si no, `sum(cuotas)+fees` no cierra con `Monto Total Facturado a Pagar`.
+- Validación: `sum(billed ≠ payment) + saldo_adeudado_final_periodo_anterior ≈ total_due` (±20 CLP).
+- Créditos/anulaciones vienen con montos negativos en `cuota_mensual`.
+- No tratar filas de dato como encabezado (ej. merchant con “sodimac” ≠ sección HOMECENTER).
 
-**Columnas de operaciones**: `Fecha | Comercio | Tipo | Monto compra | Monto total cuota | Cuotas | Mes inicio | Cuota mensual`
+**Pago oficial:** en 2.3 aparece `Pago tarjeta cmr` (monto negativo) = lo pagado del período anterior. Emparejar **una** vez con cargo en BCH (a veces BE) por monto ±2 CLP y fecha ±5 días. Los muchos `TRASPASO A:Cmr Mc Bd` / `Tarjeta Cmr` en BCH **no** son el pago del estado; no inventar espejos en CMR.
 
-**Indicadores clave**:
-- `Cupo Utilizado > Cupo Total` → tarjeta sobregirada ⚠️
+**Indicadores clave:**
+- `Cupo Utilizado > Cupo Total` → tarjeta sobregirada
 - `Monto mínimo ≠ Monto total` → se está pagando el mínimo (genera intereses)
-- `CAE Prepago` → costo anual efectivo si se paga el mínimo
+- `GIRO BANCO FALABELLA` en CuentaRUT = cajero, **no** pago CMR
 
 ---
 

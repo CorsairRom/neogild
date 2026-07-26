@@ -7,9 +7,11 @@
  *   npx tsx --env-file=.env --env-file=apps/web/.env.local scripts/load-cartolas.mjs --reset
  *
  * Pairing rules (no phantom "Otras" legs):
- *   1. BCH → Cmr / Tarjeta Cmr (or own-name amount = Falabella payment) → CMR
- *   2. Own-name BCH ↔ BE same amount ±3 days → link transfer_to
- *   3. Unmatched own-name → single-leg transfer + needs_review (no invented peer)
+ *   1. CMR ledger = Falabella statement lines only (cuota + fees + official payment)
+ *   2. Official Pago tarjeta cmr ↔ one BCH/BE charge (amount ±2, date ±5d)
+ *   3. Other BCH Cmr* outflows → expense needs_review (no CMR mirror)
+ *   4. Own-name BCH ↔ BE same amount ±3 days → link transfer_to
+ *   5. Unmatched own-name → single-leg transfer + needs_review
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -231,21 +233,32 @@ function collectLines(extracted) {
   );
 }
 
-function falabellaPaymentAmounts(extracted) {
-  const set = new Map();
-  for (const doc of extracted.banco_falabella) {
-    if (doc.total_due) set.set(doc.total_due, doc.billing_date);
-    for (const p of doc.payments ?? []) set.set(p.amount, p.date);
-  }
-  return set;
-}
-
-function isCmrDestination(description) {
+function isCmrLabeled(description) {
   return /cmr\b|tarjeta\s*cmr/i.test(description);
 }
 
-function classifyLine(line, falPayments) {
-  const amount = line.deposit > 0 ? line.deposit : line.charge;
+/** Official statement payments: { date, amount, billing_date, file }[] */
+function falabellaOfficialPayments(extracted) {
+  const out = [];
+  for (const doc of extracted.banco_falabella ?? []) {
+    for (const p of doc.payments ?? []) {
+      if (!p.amount || p.amount <= 1) continue;
+      out.push({
+        date: p.date,
+        amount: p.amount,
+        billing_date: doc.billing_date,
+        file: doc.file,
+      });
+    }
+  }
+  return out;
+}
+
+function amountsClose(a, b, tol = 2) {
+  return Math.abs(a - b) <= tol;
+}
+
+function classifyLine(line) {
   const cls = classifyCartolaLine(
     line.description,
     line.deposit,
@@ -253,20 +266,18 @@ function classifyLine(line, falPayments) {
     OWNER,
   );
 
-  // BCH → CMR credit card (label or own-name amount matching a Falabella pago)
-  if (
-    line.accountKey === "bch" &&
-    line.charge > 0 &&
-    (isCmrDestination(line.description) ||
-      (cls.kind === "tef_own" && falPayments.has(amount)))
-  ) {
+  // BCH/BE lines labeled CMR that are NOT the official statement payment:
+  // keep as expense on the bank account — do NOT invent a CMR mirror.
+  if (line.charge > 0 && isCmrLabeled(line.description)) {
     return {
-      type: "transfer",
-      category: null,
-      kind: "tef_own",
-      counterparty: cls.counterparty ?? "CMR Falabella",
-      needsReview: false,
-      peerKey: "cmr",
+      type: "expense",
+      category: "deuda.cuota",
+      kind: "cmr_partial",
+      counterparty: "CMR Falabella",
+      needsReview: true,
+      peerKey: null,
+      reviewReason:
+        "Traspaso Cmr* sin pago oficial del estado Falabella. Revisar si es abono parcial.",
     };
   }
 
@@ -308,7 +319,10 @@ async function main() {
   const userId = await ensureUser();
   if (RESET) await resetUser(userId);
   const accounts = await ensureAccounts(userId);
-  const falPayments = falabellaPaymentAmounts(extracted);
+  const officialPays = falabellaOfficialPayments(extracted).map((p) => ({
+    ...p,
+    used: false,
+  }));
 
   const bchOpenDoc = extracted.banco_chile.find((d) =>
     d.file.includes("30012026"),
@@ -335,13 +349,30 @@ async function main() {
 
   const lines = collectLines(extracted);
   const seenFp = new Set();
-  console.log(`importing ${lines.length} lines from ${FROM_DATE}`);
+  console.log(`importing ${lines.length} bank lines from ${FROM_DATE}`);
 
   /** @type {Array<{id:string, accountKey:string, date:string, amount:number, kind:string, desc:string}>} */
   const ownLegs = [];
   let imported = 0;
   let skipped = 0;
   let cmrPays = 0;
+  let cmrStatementLines = 0;
+
+  function claimOfficialPayment(amount, date) {
+    let best = null;
+    let bestDays = 6;
+    for (const p of officialPays) {
+      if (p.used) continue;
+      if (!amountsClose(p.amount, amount, 2)) continue;
+      const days = daysBetween(p.date, date);
+      if (days <= 5 && days < bestDays) {
+        best = p;
+        bestDays = days;
+      }
+    }
+    if (best) best.used = true;
+    return best;
+  }
 
   for (const line of lines) {
     const amount = line.deposit > 0 ? line.deposit : line.charge;
@@ -365,47 +396,65 @@ async function main() {
       continue;
     }
 
-    const cls = classifyLine(line, falPayments);
     const isDeposit = line.deposit > 0;
     const accountId = accounts[line.accountKey];
-    const type = cls.type;
-    const signedAmount =
-      type === "transfer" ? (isDeposit ? amount : -amount) : amount;
-
     const meta = {
       source: line.source,
       cartola_doc: line.doc,
       cartola_file: line.file,
-      cartola_kind: cls.kind,
-      counterparty: cls.counterparty,
       import_fp: fp,
     };
 
-    if (cls.peerKey === "cmr" && type === "transfer") {
-      const outId = await insertTx(userId, accounts.bch, {
-        type: "transfer",
-        amount: -amount,
-        description: line.description,
-        category: null,
-        date: line.date,
-        transferTo: accounts.cmr,
-        needsReview: false,
-        metadata: { ...meta, peer: "cmr" },
-      });
-      await insertTx(userId, accounts.cmr, {
-        type: "transfer",
-        amount: amount,
-        description: `Pago CMR <- Banco de Chile`,
-        category: null,
-        date: line.date,
-        transferTo: accounts.bch,
-        needsReview: false,
-        metadata: { ...meta, pair_of: outId, peer: "cmr" },
-      });
-      imported++;
-      cmrPays++;
-      continue;
+    // Official CMR statement payment ↔ this bank charge
+    if (!isDeposit && line.charge > 0) {
+      const pay = claimOfficialPayment(amount, line.date);
+      if (pay) {
+        const bankLabel =
+          line.accountKey === "be" ? "BancoEstado" : "Banco de Chile";
+        const outId = await insertTx(userId, accountId, {
+          type: "transfer",
+          amount: -amount,
+          description: line.description,
+          category: null,
+          date: line.date,
+          transferTo: accounts.cmr,
+          needsReview: false,
+          metadata: {
+            ...meta,
+            peer: "cmr",
+            falabella_payment: true,
+            falabella_file: pay.file,
+            falabella_billing_date: pay.billing_date,
+          },
+        });
+        await insertTx(userId, accounts.cmr, {
+          type: "transfer",
+          amount: amount,
+          description: `Pago tarjeta CMR <- ${bankLabel}`,
+          category: null,
+          date: pay.date,
+          transferTo: accountId,
+          needsReview: false,
+          metadata: {
+            source: "falabella_cmr",
+            falabella_file: pay.file,
+            falabella_billing_date: pay.billing_date,
+            kind: "payment",
+            pair_of: outId,
+            peer: line.accountKey,
+            import_fp: `falabella:${pay.file}:payment:${pay.date}:${pay.amount}`,
+          },
+        });
+        imported++;
+        cmrPays++;
+        continue;
+      }
     }
+
+    const cls = classifyLine(line);
+    const type = cls.type;
+    const signedAmount =
+      type === "transfer" ? (isDeposit ? amount : -amount) : amount;
 
     const id = await insertTx(userId, accountId, {
       type,
@@ -415,7 +464,12 @@ async function main() {
       date: line.date,
       transferTo: null,
       needsReview: cls.needsReview ?? false,
-      metadata: meta,
+      metadata: {
+        ...meta,
+        cartola_kind: cls.kind,
+        counterparty: cls.counterparty,
+        ...(cls.reviewReason ? { review_reason: cls.reviewReason } : {}),
+      },
     });
 
     if (cls.kind === "tef_own") {
@@ -428,6 +482,95 @@ async function main() {
         desc: line.description,
       });
     }
+    imported++;
+  }
+
+  // CMR statement lines (cuotas, fees, taxes, insurance). Payments already paired above.
+  for (const doc of extracted.banco_falabella ?? []) {
+    if (!doc.parse_ok && doc.parse_ok !== undefined) {
+      console.warn(`skip CMR lines for ${doc.file} (parse_ok=false)`);
+      continue;
+    }
+    if (!doc.billing_date || doc.billing_date < FROM_DATE) continue;
+
+    for (const [idx, L] of (doc.lines ?? []).entries()) {
+      if (L.kind === "payment") continue; // paired (or orphan handled below)
+
+      const billed = Number(L.billed_amount);
+      if (billed === 0) continue;
+
+      const fp = `falabella:${doc.file}:${L.kind}:${L.date}:${L.description}:${billed}:${idx}`;
+      if (seenFp.has(fp)) {
+        skipped++;
+        continue;
+      }
+      seenFp.add(fp);
+
+      const { data: existing } = await admin
+        .from("transactions")
+        .select("id")
+        .eq("user_id", userId)
+        .contains("metadata", { import_fp: fp })
+        .maybeSingle();
+      if (existing) {
+        skipped++;
+        continue;
+      }
+
+      const isCredit = billed < 0;
+      const type = isCredit ? "refund" : "expense";
+      const category =
+        L.kind === "insurance" || L.kind === "fee" || L.kind === "tax"
+          ? "deuda.cuota"
+          : null;
+
+      await insertTx(userId, accounts.cmr, {
+        type,
+        amount: Math.abs(billed),
+        description: L.description,
+        category,
+        date: doc.billing_date,
+        transferTo: null,
+        needsReview: false,
+        metadata: {
+          source: "falabella_cmr",
+          falabella_file: doc.file,
+          falabella_billing_date: doc.billing_date,
+          purchase_date: L.date,
+          section: L.section,
+          kind: L.kind,
+          purchase_amount: L.purchase_amount,
+          installment_progress: L.installment_progress,
+          import_fp: fp,
+        },
+      });
+      imported++;
+      cmrStatementLines++;
+    }
+  }
+
+  // Unmatched official payments → CMR-only transfer, needs_review
+  for (const pay of officialPays) {
+    if (pay.used) continue;
+    if (pay.date < FROM_DATE) continue;
+    const fp = `falabella:${pay.file}:payment:${pay.date}:${pay.amount}:unpaired`;
+    await insertTx(userId, accounts.cmr, {
+      type: "transfer",
+      amount: pay.amount,
+      description: "Pago tarjeta CMR (sin espejo en cartola débito)",
+      category: null,
+      date: pay.date,
+      transferTo: null,
+      needsReview: true,
+      metadata: {
+        source: "falabella_cmr",
+        falabella_file: pay.file,
+        falabella_billing_date: pay.billing_date,
+        kind: "payment",
+        import_fp: fp,
+        review_reason: "Pago del estado sin cargo coincidente en BCH/BE (±5d, ±2 CLP).",
+      },
+    });
     imported++;
   }
 
@@ -615,6 +758,7 @@ async function main() {
     skipped,
     paired,
     cmrPays,
+    cmrStatementLines,
     needsReviewOwn,
     balances: bals?.map((a) => ({
       name: a.name,
