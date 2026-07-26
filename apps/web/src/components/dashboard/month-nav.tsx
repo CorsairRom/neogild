@@ -5,7 +5,14 @@ import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon } from "@phosphor-icon
 import { shiftMonth } from "@neogild/core";
 import { formatMonthTitle } from "@/lib/format";
 
-export function MonthNav({ month }: { month: string }) {
+export function MonthNav({
+  month,
+  basePath = "/",
+}: {
+  month: string;
+  /** Path to navigate (keeps other search params). Default: dashboard `/`. */
+  basePath?: string;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const prev = shiftMonth(month, -1);
@@ -14,7 +21,8 @@ export function MonthNav({ month }: { month: string }) {
   function go(target: string) {
     const params = new URLSearchParams(searchParams.toString());
     params.set("month", target);
-    router.push(`/?${params.toString()}`);
+    const q = params.toString();
+    router.push(q ? `${basePath}?${q}` : basePath);
   }
 
   return (

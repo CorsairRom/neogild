@@ -249,6 +249,14 @@ def extract_falabella() -> list[dict]:
         billing = re.search(r"Fecha Facturación Estado de Cuenta:\s+(\d{2}/\d{2}/\d{4})", text)
         total = re.search(r"Monto Total Facturado a Pagar\s+\$?([\d.]+)", text)
         minimum = re.search(r"Monto mínimo a pagar\s+\$?([\d.]+)", text, re.I)
+        # Cupo Total* / Cupo Utilizado / Cupo Disponible (first data row)
+        cupo_m = re.search(
+            r"Cupo Total\*\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)",
+            text,
+        )
+        cupo_total = parse_clp(cupo_m.group(1)) if cupo_m else None
+        cupo_utilizado = parse_clp(cupo_m.group(2)) if cupo_m else None
+        cupo_disponible = parse_clp(cupo_m.group(3)) if cupo_m else None
         payments = []
         for m in re.finditer(
             r"(\d{2}/\d{2}/\d{4})\s+Pago tarjeta cmr\s+T\s+(-?[\d.]+)",
@@ -294,6 +302,9 @@ def extract_falabella() -> list[dict]:
             ),
             "total_due": parse_clp(total.group(1)) if total else None,
             "minimum_due": parse_clp(minimum.group(1)) if minimum else None,
+            "cupo_total": cupo_total,
+            "cupo_utilizado": cupo_utilizado,
+            "cupo_disponible": cupo_disponible,
             "payments": payments,
             "purchases": purchases,
         })

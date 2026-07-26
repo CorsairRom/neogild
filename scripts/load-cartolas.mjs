@@ -521,9 +521,76 @@ async function main() {
 
   await admin.rpc("rebuild_account_balances", { p_user_id: userId });
 
+  // Stamp last cartola close on debit accounts (UI reconciliation badge)
+  const bchJun = extracted.banco_chile.find((d) => d.file.includes("30062026"));
+  const beLatest = [...extracted.banco_estado]
+    .filter((d) => d.cartola_no && d.cartola_no !== "000015")
+    .sort((a, b) => a.cartola_no.localeCompare(b.cartola_no))
+    .at(-1);
+
+  if (bchJun?.closing_balance != null) {
+    await admin
+      .from("accounts")
+      .update({
+        last_statement_balance: bchJun.closing_balance,
+        last_statement_date: "2026-06-30",
+      })
+      .eq("id", accounts.bch);
+  }
+  if (beLatest?.closing_balance != null) {
+    const beCloseDate =
+      beLatest.lines?.length > 0
+        ? [...beLatest.lines].sort((a, b) => a.date.localeCompare(b.date)).at(-1)
+            .date
+        : null;
+    await admin
+      .from("accounts")
+      .update({
+        last_statement_balance: beLatest.closing_balance,
+        last_statement_date: beCloseDate,
+      })
+      .eq("id", accounts.be);
+  }
+
+  // CMR: balance = -total_due from latest estado (deuda facturada), not sum of pays.
+  // Payments stay on the ledger for BCH traceability; CMR display is statement-sourced.
+  const falLatest = [...extracted.banco_falabella]
+    .filter((d) => d.billing_date && d.total_due != null)
+    .sort((a, b) => a.billing_date.localeCompare(b.billing_date))
+    .at(-1);
+
+  if (falLatest) {
+    const debt = -Math.abs(falLatest.total_due);
+    const { data: cmrRow } = await admin
+      .from("accounts")
+      .select("metadata")
+      .eq("id", accounts.cmr)
+      .single();
+    await admin
+      .from("accounts")
+      .update({
+        balance: debt,
+        last_statement_balance: debt,
+        last_statement_date: falLatest.billing_date,
+        metadata: {
+          ...(cmrRow?.metadata ?? {}),
+          balance_source: "statement_total_due",
+          total_due: falLatest.total_due,
+          minimum_due: falLatest.minimum_due,
+          cupo_total: falLatest.cupo_total,
+          cupo_utilizado: falLatest.cupo_utilizado,
+          cupo_disponible: falLatest.cupo_disponible,
+          statement_file: falLatest.file,
+        },
+      })
+      .eq("id", accounts.cmr);
+  }
+
   const { data: bals } = await admin
     .from("accounts")
-    .select("name, balance, subtype, is_archived, metadata")
+    .select(
+      "name, balance, subtype, is_archived, metadata, last_statement_balance, last_statement_date",
+    )
     .eq("user_id", userId)
     .eq("is_archived", false);
 
@@ -531,22 +598,17 @@ async function main() {
     .filter((a) => a.subtype === "debit")
     .reduce((s, a) => s + Number(a.balance), 0);
 
-  const bchJun = extracted.banco_chile.find((d) => d.file.includes("30062026"));
-  const beLatest = [...extracted.banco_estado]
-    .filter((d) => d.cartola_no && d.cartola_no !== "000015")
-    .sort((a, b) => a.cartola_no.localeCompare(b.cartola_no))
-    .at(-1);
-
   const bchBal = Number(
     bals?.find((a) => /chile/i.test(a.name))?.balance ?? 0,
   );
   const beBal = Number(
     bals?.find((a) => /cuentarut/i.test(a.name))?.balance ?? 0,
   );
+  const cmrBal = Number(
+    bals?.find((a) => /cmr/i.test(a.name))?.balance ?? 0,
+  );
   const bchDrift = bchBal - (bchJun?.closing_balance ?? bchBal);
   const beDrift = beBal - (beLatest?.closing_balance ?? beBal);
-
-  const beMeta = bals?.find((a) => /cuentarut/i.test(a.name))?.metadata;
 
   console.log({
     imported,
@@ -558,9 +620,18 @@ async function main() {
       name: a.name,
       balance: a.balance,
       subtype: a.subtype,
+      last_statement_balance: a.last_statement_balance,
+      last_statement_date: a.last_statement_date,
     })),
-    cuentarutInstruments: beMeta,
     trackedCash: cash,
+    cmrDebt: cmrBal,
+    falabella: falLatest
+      ? {
+          billing_date: falLatest.billing_date,
+          total_due: falLatest.total_due,
+          cupo_utilizado: falLatest.cupo_utilizado,
+        }
+      : null,
     expectedBchClose: bchJun?.closing_balance,
     expectedBeClose: beLatest?.closing_balance,
     bchDrift,
@@ -569,12 +640,10 @@ async function main() {
 
   if (Math.abs(bchDrift) <= 2000 && Math.abs(beDrift) <= 2000) {
     console.log(
-      `✓ statement reconcile OK — BCH drift ${bchDrift}, BE drift ${beDrift}`,
+      `✓ statement reconcile OK — BCH drift ${bchDrift}, BE drift ${beDrift}, CMR por pagar ${cmrBal}`,
     );
   } else {
-    console.warn(
-      `⚠ statement drift — BCH ${bchDrift}, BE ${beDrift}`,
-    );
+    console.warn(`⚠ statement drift — BCH ${bchDrift}, BE ${beDrift}`);
   }
 }
 

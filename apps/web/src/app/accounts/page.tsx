@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import {
   BankIcon,
   CheckCircleIcon,
@@ -10,6 +11,7 @@ import {
 } from "@phosphor-icons/react/ssr";
 import { requireOnboarded } from "@/lib/auth/session";
 import { AppShell } from "@/components/app-shell";
+import { MonthNav } from "@/components/dashboard/month-nav";
 import { Amount } from "@/components/privacy-provider";
 import { formatCLP } from "@/lib/format";
 import {
@@ -64,9 +66,17 @@ function accountHint(
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-function reconciliationStatus(balance: number, lastStatementBalance: number | null, lastStatementDate: string | null) {
-  if (lastStatementBalance === null) {
-    return { label: "Sin cartola cargada este mes", color: "var(--muted)", Icon: ClockIcon };
+function reconciliationStatus(
+  balance: number,
+  lastStatementBalance: number | null,
+  lastStatementDate: string | null,
+) {
+  if (lastStatementBalance === null || !lastStatementDate) {
+    return {
+      label: "Sin cartola cargada",
+      color: "var(--muted)",
+      Icon: ClockIcon,
+    };
   }
   if (balance === lastStatementBalance) {
     return {
@@ -113,22 +123,42 @@ export default async function AccountsPage({
               <Amount>{formatCLP(totalBalance, { signed: true })}</Amount>
             </p>
           </div>
-          <Link href="/accounts/upload" className="ng-btn ng-btn-primary">
-            <UploadSimpleIcon size={16} />
-            Cargar cartola
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <Suspense fallback={null}>
+              <MonthNav month={month} basePath="/accounts" />
+            </Suspense>
+            <Link href="/accounts/upload" className="ng-btn ng-btn-primary">
+              <UploadSimpleIcon size={16} />
+              Cargar cartola
+            </Link>
+          </div>
         </div>
 
-        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
+        <div
+          className="grid gap-4"
+          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}
+        >
           {accounts.map((account) => {
             const act = activity.find((a) => a.account_id === account.id);
             const Icon = ACCOUNT_ICONS[account.subtype] ?? BankIcon;
             const hint = accountHint(account.subtype, account.metadata);
+            const isCredit = account.subtype === "credit_card";
             const recon = reconciliationStatus(
               account.balance,
               account.last_statement_balance,
               account.last_statement_date,
             );
+            const meta = account.metadata as {
+              total_due?: number;
+              cupo_utilizado?: number;
+              cupo_total?: number;
+              balance_source?: string;
+            } | null;
+
+            // Month movement: include transfers (inter-account cash) for debit accounts
+            const monthIn = (act?.income ?? 0) + (act?.transfer_in ?? 0);
+            const monthOut = (act?.expense ?? 0) + (act?.transfer_out ?? 0);
+
             return (
               <Link
                 key={account.id}
@@ -140,35 +170,68 @@ export default async function AccountsPage({
                     <Icon size={18} />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-medium">{account.name}</span>
+                    <span className="block truncate text-[15px] font-medium">
+                      {account.name}
+                    </span>
                     <span className="block text-xs text-faint">
                       {subtypeLabel(account.subtype)}
                       {hint ? ` · ${hint}` : ""}
                     </span>
                   </span>
                 </div>
-                <p
-                  className="m-0 text-[28px] font-semibold tracking-[-0.02em] tabular-nums"
-                  style={account.balance < 0 ? { color: "var(--neg)" } : undefined}
-                >
-                  <Amount>{formatCLP(account.balance, { signed: true })}</Amount>
-                </p>
-                {act && (
+
+                <div>
+                  {isCredit && (
+                    <p className="m-0 mb-1 text-[11px] tracking-[0.08em] text-faint uppercase">
+                      Por pagar
+                    </p>
+                  )}
+                  <p
+                    className="m-0 text-[28px] font-semibold tracking-[-0.02em] tabular-nums"
+                    style={
+                      account.balance < 0 || isCredit
+                        ? { color: "var(--neg)" }
+                        : undefined
+                    }
+                  >
+                    <Amount>
+                      {formatCLP(
+                        isCredit ? Math.abs(account.balance) : account.balance,
+                        { signed: !isCredit },
+                      )}
+                    </Amount>
+                  </p>
+                  {isCredit && meta?.cupo_utilizado != null && meta?.cupo_total != null && (
+                    <p className="mt-1 m-0 text-xs text-faint">
+                      Utilizado {formatCLP(meta.cupo_utilizado)} / cupo{" "}
+                      {formatCLP(meta.cupo_total)}
+                    </p>
+                  )}
+                </div>
+
+                {(monthIn > 0 || monthOut > 0) && (
                   <div className="flex gap-5">
                     <span className="flex flex-col gap-0.5">
                       <span className="text-[11px] text-faint">Entró</span>
-                      <span className="text-[13px] tabular-nums" style={{ color: "var(--pos)" }}>
-                        <Amount>{formatCLP(act.income)}</Amount>
+                      <span
+                        className="text-[13px] tabular-nums"
+                        style={{ color: "var(--pos)" }}
+                      >
+                        <Amount>{formatCLP(monthIn)}</Amount>
                       </span>
                     </span>
                     <span className="flex flex-col gap-0.5">
                       <span className="text-[11px] text-faint">Salió</span>
-                      <span className="text-[13px] tabular-nums" style={{ color: "var(--neg)" }}>
-                        <Amount>{formatCLP(act.expense)}</Amount>
+                      <span
+                        className="text-[13px] tabular-nums"
+                        style={{ color: "var(--neg)" }}
+                      >
+                        <Amount>{formatCLP(monthOut)}</Amount>
                       </span>
                     </span>
                   </div>
                 )}
+
                 <div
                   className="flex items-center gap-2 rounded-[9px] bg-surface-2 px-3 py-2.5 text-xs"
                   style={{ color: recon.color }}
@@ -182,8 +245,9 @@ export default async function AccountsPage({
         </div>
 
         <p className="m-0 max-w-[680px] text-[13px] leading-[1.6] text-muted">
-          Las transferencias entre tus propias cuentas no cuentan como ingreso ni gasto del mes:
-          acá ves cuánto hay en cada banco y cómo se mueve entre ellos.
+          El saldo grande es la plata actual (o deuda de la TC). El mes del
+          selector filtra cuánto entró y salió en ese período, incluidas
+          transferencias entre tus cuentas.
         </p>
       </div>
     </AppShell>
