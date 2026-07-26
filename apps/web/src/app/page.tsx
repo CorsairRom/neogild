@@ -11,13 +11,17 @@ import {
   TrendChart,
 } from "@/components/dashboard/nocturne";
 import { SyncButton } from "@/components/gmail-sync";
-import { formatCLP } from "@/lib/format";
+import { formatCLP, formatMonthTitle } from "@/lib/format";
 import {
+  cashAccountsActualBalance,
+  cashAccountsMonthNet,
+  getAccountMonthActivity,
   getCategories,
   getCategoryBreakdown,
   getMonthlyBuckets,
   getMonthlyTrend,
   getPersonalAccountBalances,
+  monthNetFromActivity,
   parseMonthParam,
 } from "@neogild/core";
 
@@ -60,18 +64,20 @@ export default async function DashboardPage({
   const categories = await getCategories(supabase, { entity: "personal" });
   const categoryLabels = new Map(categories.map((c) => [c.id, c.name]));
 
-  const [buckets, breakdown, trend, reviewResult, syncResult, accounts] = await Promise.all([
-    getMonthlyBuckets(supabase, { month }),
-    getCategoryBreakdown(supabase, month, categoryLabels),
-    getMonthlyTrend(supabase, month, 6),
-    supabase
-      .from("transactions")
-      .select("*", { count: "exact", head: true })
-      .or("category.is.null,needs_review.eq.true")
-      .in("type", ["income", "expense", "refund"]),
-    supabase.from("sync_state").select("gmail_watermark").maybeSingle(),
-    getPersonalAccountBalances(supabase),
-  ]);
+  const [buckets, breakdown, trend, reviewResult, syncResult, accounts, activity] =
+    await Promise.all([
+      getMonthlyBuckets(supabase, { month }),
+      getCategoryBreakdown(supabase, month, categoryLabels),
+      getMonthlyTrend(supabase, month, 6),
+      supabase
+        .from("transactions")
+        .select("*", { count: "exact", head: true })
+        .or("category.is.null,needs_review.eq.true")
+        .in("type", ["income", "expense", "refund"]),
+      supabase.from("sync_state").select("gmail_watermark").maybeSingle(),
+      getPersonalAccountBalances(supabase),
+      getAccountMonthActivity(supabase, month),
+    ]);
 
   const reviewCount = reviewResult.count ?? 0;
   const syncState = syncResult.data;
@@ -79,15 +85,22 @@ export default async function DashboardPage({
   const gastos =
     buckets.necesidades + buckets.consumo + buckets.ahorro + buckets.por_categorizar;
 
-  const totalAccountBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
+  const monthCashNet = cashAccountsMonthNet(accounts, activity);
+  const actualCash = cashAccountsActualBalance(accounts);
 
-  const accountsForSummary = accounts.slice(0, 3).map((a) => ({
-    id: a.id,
-    name: a.name,
-    kind: subtypeLabel(a.subtype),
-    subtype: a.subtype,
-    balance: a.balance,
-  }));
+  const accountsForSummary = accounts.slice(0, 3).map((a) => {
+    const { monthNet } = monthNetFromActivity(
+      activity.find((row) => row.account_id === a.id),
+    );
+    return {
+      id: a.id,
+      name: a.name,
+      kind: subtypeLabel(a.subtype),
+      subtype: a.subtype,
+      monthNet,
+      actualBalance: a.balance,
+    };
+  });
 
   const sparkline = trend.map((p) => p.ingresos - p.gastos);
 
@@ -96,7 +109,10 @@ export default async function DashboardPage({
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-5">
           <HeroBalanceCard
-            totalBalance={totalAccountBalance}
+            title={`Neto del mes · ${formatMonthTitle(month)}`}
+            totalBalance={monthCashNet}
+            secondaryLabel="Saldo actual en efectivo"
+            secondaryValue={formatCLP(actualCash, { signed: true })}
             deltaLabel={
               buckets.disponible !== 0 ? formatCLP(buckets.disponible, { signed: true }) : null
             }

@@ -23,6 +23,40 @@ export type AccountMonthActivity = {
   transfer_out: number
 }
 
+export type AccountMonthNet = {
+  monthIn: number
+  monthOut: number
+  monthNet: number
+}
+
+/** Entró/salió del mes incluyendo transferencias entre cuentas propias. */
+export function monthNetFromActivity(
+  act?: Pick<AccountMonthActivity, 'income' | 'expense' | 'transfer_in' | 'transfer_out'> | null,
+): AccountMonthNet {
+  const monthIn = (act?.income ?? 0) + (act?.transfer_in ?? 0)
+  const monthOut = (act?.expense ?? 0) + (act?.transfer_out ?? 0)
+  return { monthIn, monthOut, monthNet: monthIn - monthOut }
+}
+
+/** Neto del mes en cuentas de efectivo (debit/cash). Genérico por subtype. */
+export function cashAccountsMonthNet(
+  accounts: Array<{ id: string; subtype: string }>,
+  activity: AccountMonthActivity[],
+): number {
+  const byId = new Map(activity.map((a) => [a.account_id, a]))
+  return accounts
+    .filter((a) => a.subtype === 'debit' || a.subtype === 'cash')
+    .reduce((sum, a) => sum + monthNetFromActivity(byId.get(a.id)).monthNet, 0)
+}
+
+export function cashAccountsActualBalance(
+  accounts: Array<{ subtype: string; balance: number }>,
+): number {
+  return accounts
+    .filter((a) => a.subtype === 'debit' || a.subtype === 'cash')
+    .reduce((sum, a) => sum + a.balance, 0)
+}
+
 export async function getPersonalAccountBalances(
   supabase: TypedClient,
 ): Promise<AccountBalanceRow[]> {

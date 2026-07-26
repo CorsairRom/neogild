@@ -13,8 +13,11 @@ import { AppShell } from "@/components/app-shell";
 import { Amount } from "@/components/privacy-provider";
 import { formatCLP, formatMonthTitle } from "@/lib/format";
 import {
+  cashAccountsActualBalance,
+  cashAccountsMonthNet,
   getAccountMonthActivity,
   getPersonalAccountBalances,
+  monthNetFromActivity,
   parseMonthParam,
 } from "@neogild/core";
 
@@ -104,29 +107,13 @@ export default async function AccountsPage({
     getAccountMonthActivity(supabase, month),
   ]);
 
-  const monthNets = accounts.map((account) => {
-    const act = activity.find((a) => a.account_id === account.id);
-    const monthIn = (act?.income ?? 0) + (act?.transfer_in ?? 0);
-    const monthOut = (act?.expense ?? 0) + (act?.transfer_out ?? 0);
-    return {
-      accountId: account.id,
-      monthIn,
-      monthOut,
-      monthNet: monthIn - monthOut,
-    };
-  });
+  const monthNets = accounts.map((account) => ({
+    accountId: account.id,
+    ...monthNetFromActivity(activity.find((a) => a.account_id === account.id)),
+  }));
 
-  // Hero: cash accounts only (same scope as "efectivo")
-  const cashMonthNet = accounts
-    .filter((a) => a.subtype === "debit" || a.subtype === "cash")
-    .reduce((sum, a) => {
-      const row = monthNets.find((n) => n.accountId === a.id);
-      return sum + (row?.monthNet ?? 0);
-    }, 0);
-
-  const cashActual = accounts
-    .filter((a) => a.subtype === "debit" || a.subtype === "cash")
-    .reduce((sum, a) => sum + a.balance, 0);
+  const cashMonthNet = cashAccountsMonthNet(accounts, activity);
+  const cashActual = cashAccountsActualBalance(accounts);
 
   return (
     <AppShell userEmail={user.email ?? ""} title="Cuentas">

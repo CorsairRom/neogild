@@ -6,7 +6,11 @@ import { AppShell } from "@/components/app-shell";
 import { ListPagination } from "@/components/list-pagination";
 import { formatCLP, formatMonthTitle, typeLabel } from "@/lib/format";
 import { parsePageParam, parsePageSizeParam } from "@/lib/pagination";
-import { getAccountMonthActivity, parseMonthParam } from "@neogild/core";
+import {
+  getAccountMonthActivity,
+  monthNetFromActivity,
+  parseMonthParam,
+} from "@neogild/core";
 
 export const dynamic = "force-dynamic";
 
@@ -73,11 +77,14 @@ export default async function AccountDetailPage({
   const showStatementJump =
     total === 0 && statementMonth != null && statementMonth !== month;
 
+  const { monthIn, monthOut, monthNet } = monthNetFromActivity(activity);
+  const isCredit = account.subtype === "credit_card";
+
   return (
     <AppShell
       userEmail={user.email ?? ""}
       title={account.name}
-      description="Saldo actual y movimientos del mes seleccionado"
+      description={`Neto y movimientos de ${formatMonthTitle(month)}`}
       actions={
         <Link
           href={`/accounts?month=${month}`}
@@ -97,29 +104,41 @@ export default async function AccountDetailPage({
       </div>
       <section className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-          <p className="text-xs text-zinc-500">
-            {account.subtype === "credit_card" ? "Por pagar" : "Saldo"}
+          <p className="text-xs text-zinc-500">Neto del mes</p>
+          <p
+            className="mt-1 text-2xl font-semibold tabular-nums"
+            style={
+              monthNet < 0
+                ? { color: "var(--neg)" }
+                : monthNet > 0
+                  ? { color: "var(--pos)" }
+                  : undefined
+            }
+          >
+            {formatCLP(monthNet, { signed: true })}
           </p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">
-            {formatCLP(account.balance, { signed: true })}
+          <p className="mt-1 text-xs text-muted">
+            {isCredit ? "Por pagar " : "Saldo actual "}
+            <span className="tabular-nums text-text">
+              {formatCLP(
+                isCredit ? Math.abs(account.balance) : account.balance,
+                { signed: !isCredit },
+              )}
+            </span>
           </p>
         </div>
-        {activity && (
-          <>
-            <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-              <p className="text-xs text-zinc-500">Ingresos del mes</p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-emerald-600">
-                {formatCLP(activity.income)}
-              </p>
-            </div>
-            <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-              <p className="text-xs text-zinc-500">Gastos del mes</p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-rose-600">
-                {formatCLP(activity.expense)}
-              </p>
-            </div>
-          </>
-        )}
+        <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+          <p className="text-xs text-zinc-500">Entró</p>
+          <p className="mt-1 text-lg font-semibold tabular-nums text-emerald-600">
+            {formatCLP(monthIn)}
+          </p>
+        </div>
+        <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+          <p className="text-xs text-zinc-500">Salió</p>
+          <p className="mt-1 text-lg font-semibold tabular-nums text-rose-600">
+            {formatCLP(monthOut)}
+          </p>
+        </div>
       </section>
 
       {account.last_statement_balance !== null && (
@@ -138,19 +157,6 @@ export default async function AccountDetailPage({
               )}.`}
         </p>
       )}
-
-      {(activity?.transfer_in ?? 0) > 0 || (activity?.transfer_out ?? 0) > 0 ? (
-        <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
-          Transferencias del mes:{" "}
-          {activity!.transfer_in > 0 && (
-            <span className="text-emerald-600">+{formatCLP(activity!.transfer_in)} entrantes</span>
-          )}
-          {activity!.transfer_in > 0 && activity!.transfer_out > 0 && " · "}
-          {activity!.transfer_out > 0 && (
-            <span className="text-rose-600">−{formatCLP(activity!.transfer_out)} salientes</span>
-          )}
-        </p>
-      ) : null}
 
       {total === 0 ? (
         <div className="mt-6 rounded-xl border border-zinc-200 px-4 py-12 text-center text-zinc-500 dark:border-zinc-800">

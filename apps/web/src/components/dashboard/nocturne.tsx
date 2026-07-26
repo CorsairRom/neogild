@@ -16,13 +16,19 @@ import { categoryIcon } from "@/lib/category-icon";
 const BAR_COLORS = ["var(--accent)", "var(--info)", "var(--warn)", "var(--neg)", "var(--pos)"];
 
 export function HeroBalanceCard({
+  title = "Neto del mes",
   totalBalance,
+  secondaryLabel,
+  secondaryValue,
   deltaLabel,
   deltaPositive,
   syncLabel,
   sparkline,
 }: {
+  title?: string;
   totalBalance: number;
+  secondaryLabel?: string;
+  secondaryValue?: string;
   deltaLabel: string | null;
   deltaPositive: boolean;
   syncLabel: string;
@@ -33,11 +39,28 @@ export function HeroBalanceCard({
   return (
     <div className="ng-hero ng-rise p-6">
       <p className="m-0 text-[11px] tracking-[0.1em] text-accent-strong uppercase">
-        Total en tus cuentas
+        {title}
       </p>
-      <p className="mt-2.5 text-[44px] leading-[1.02] font-semibold tracking-[-0.03em] tabular-nums">
+      <p
+        className="mt-2.5 text-[44px] leading-[1.02] font-semibold tracking-[-0.03em] tabular-nums"
+        style={
+          totalBalance < 0
+            ? { color: "var(--neg)" }
+            : totalBalance > 0
+              ? { color: "var(--pos)" }
+              : undefined
+        }
+      >
         <Amount>{formatCLP(totalBalance, { signed: true })}</Amount>
       </p>
+      {secondaryLabel && secondaryValue && (
+        <p className="mt-2 m-0 text-sm text-muted">
+          {secondaryLabel}{" "}
+          <span className="tabular-nums text-text">
+            <Amount>{secondaryValue}</Amount>
+          </span>
+        </p>
+      )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {deltaLabel && (
           <span
@@ -48,7 +71,7 @@ export function HeroBalanceCard({
             {deltaLabel}
           </span>
         )}
-        <span className="text-[13px] text-muted">este mes · {syncLabel}</span>
+        <span className="text-[13px] text-muted">disponible categorizado · {syncLabel}</span>
       </div>
       <svg viewBox="0 0 320 48" preserveAspectRatio="none" className="ng-sweep mt-4 h-[52px] w-full overflow-visible">
         <polyline
@@ -171,7 +194,14 @@ export function AccountsSummaryCard({
   accounts,
   month,
 }: {
-  accounts: Array<{ id: string; name: string; kind: string; subtype: string; balance: number }>;
+  accounts: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    subtype: string;
+    monthNet: number;
+    actualBalance: number;
+  }>;
   month: string;
 }) {
   return (
@@ -187,6 +217,7 @@ export function AccountsSummaryCard({
       </div>
       {accounts.map((acc) => {
         const Icon = ACCOUNT_ICONS[acc.subtype] ?? BankIcon;
+        const isCredit = acc.subtype === "credit_card";
         return (
           <Link
             key={acc.id}
@@ -198,13 +229,29 @@ export function AccountsSummaryCard({
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm">{acc.name}</span>
-              <span className="block text-xs text-faint">{acc.kind}</span>
+              <span className="block text-xs text-faint">
+                {acc.kind}
+                {" · "}
+                {isCredit ? "por pagar " : "saldo "}
+                <Amount>
+                  {formatCLP(
+                    isCredit ? Math.abs(acc.actualBalance) : acc.actualBalance,
+                    { signed: !isCredit },
+                  )}
+                </Amount>
+              </span>
             </span>
             <span
               className="flex-none text-sm font-semibold tabular-nums"
-              style={acc.balance < 0 ? { color: "var(--neg)" } : undefined}
+              style={
+                acc.monthNet < 0
+                  ? { color: "var(--neg)" }
+                  : acc.monthNet > 0
+                    ? { color: "var(--pos)" }
+                    : undefined
+              }
             >
-              <Amount>{formatCLP(acc.balance, { signed: true })}</Amount>
+              <Amount>{formatCLP(acc.monthNet, { signed: true })}</Amount>
             </span>
           </Link>
         );
