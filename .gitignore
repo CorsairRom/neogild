@@ -29,3 +29,4 @@ npm-debug.log*
 *.log
 *.xls
 *.pdf
+data/cartolas/_extracted.json
