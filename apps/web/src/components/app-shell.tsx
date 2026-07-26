@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { AppNav } from "@/components/app-nav";
+import { createClient } from "@/lib/supabase/server";
+import { AppShellClient } from "@/components/app-shell-client";
 
-export function AppShell({
+export async function AppShell({
   userEmail,
   title,
   description,
@@ -14,46 +15,31 @@ export function AppShell({
   children: React.ReactNode;
   actions?: React.ReactNode;
 }) {
+  const supabase = await createClient();
+
+  const [reviewResult, inboxResult] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select("*", { count: "exact", head: true })
+      .or("category.is.null,needs_review.eq.true")
+      .in("type", ["income", "expense", "refund"]),
+    supabase
+      .from("email_movements")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "pending"),
+  ]);
+
   return (
-    <div className="min-h-screen bg-[var(--background)]">
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-        <header className="mb-8 border-b border-zinc-200 pb-6 dark:border-zinc-800">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
-                Neogild
-              </p>
-              <h1 className="text-2xl font-semibold tracking-tight text-balance">{title}</h1>
-              {description && (
-                <p className="max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">{description}</p>
-              )}
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              <p className="text-xs text-zinc-500">{userEmail}</p>
-              <form action="/auth/signout" method="post">
-                <button
-                  type="submit"
-                  className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
-                >
-                  Salir
-                </button>
-              </form>
-            </div>
-          </div>
-          <div className="mt-5 flex flex-col gap-4">
-            <div className="overflow-x-auto pb-1">
-              <AppNav />
-            </div>
-            {actions && (
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 pt-4 dark:border-zinc-800/80">
-                {actions}
-              </div>
-            )}
-          </div>
-        </header>
-        {children}
-      </div>
-    </div>
+    <AppShellClient
+      userEmail={userEmail}
+      title={title}
+      description={description}
+      actions={actions}
+      reviewBadge={reviewResult.count ?? 0}
+      inboxBadge={inboxResult.count ?? 0}
+    >
+      {children}
+    </AppShellClient>
   );
 }
 
@@ -65,31 +51,27 @@ export function StatCard({
   tone = "default",
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   hint?: string;
   href?: string;
   tone?: "default" | "warn" | "positive";
 }) {
   const toneClass =
-    tone === "warn"
-      ? "border-amber-200/80 dark:border-amber-900/50"
-      : tone === "positive"
-        ? "border-emerald-200/80 dark:border-emerald-900/50"
-        : "border-zinc-200 dark:border-zinc-800";
+    tone === "warn" ? "ng-card-warn" : tone === "positive" ? "ng-card-positive" : "";
 
   const inner = (
     <div
-      className={`rounded-xl border bg-zinc-50/50 p-4 dark:bg-zinc-900/30 ${toneClass} ${href ? "transition hover:border-zinc-400 dark:hover:border-zinc-600" : ""}`}
+      className={`ng-card p-4 ${toneClass} ${href ? "ng-card-hover-accent" : ""}`}
     >
-      <p className="text-xs font-medium text-zinc-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight">{value}</p>
-      {hint && <p className="mt-1 text-xs text-zinc-500">{hint}</p>}
+      <p className="m-0 text-xs text-muted">{label}</p>
+      <p className="mt-2 text-[19px] font-semibold tabular-nums">{value}</p>
+      {hint && <p className="mt-1 text-xs text-faint">{hint}</p>}
     </div>
   );
 
   if (href) {
     return (
-      <Link href={href} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 rounded-xl">
+      <Link href={href} className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
         {inner}
       </Link>
     );

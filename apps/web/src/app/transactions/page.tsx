@@ -1,128 +1,202 @@
-import Link from "next/link";
+import { Suspense } from "react";
+import {
+  ArrowDownLeftIcon,
+  ArrowsLeftRightIcon,
+  QuestionIcon,
+} from "@phosphor-icons/react/ssr";
 import { requireOnboarded } from "@/lib/auth/session";
 import { AppShell } from "@/components/app-shell";
-import {
-  TransactionCategorySelect,
-  TransactionFilters,
-} from "@/components/transaction-table";
-import { formatCLP, typeLabel } from "@/lib/format";
+import { MonthNav } from "@/components/dashboard/month-nav";
+import { TransactionCategorySelect, TransactionTypeFilters } from "@/components/transaction-table";
+import { Amount } from "@/components/privacy-provider";
+import { categoryIcon } from "@/lib/category-icon";
+import { formatCLP } from "@/lib/format";
 import { getCategories, getTransactions, parseMonthParam } from "@neogild/core";
 
 export const dynamic = "force-dynamic";
 
+type Tx = {
+  id: string;
+  date: string;
+  description: string | null;
+  amount: number;
+  type: string;
+  category: string | null;
+  needs_review: boolean;
+};
+
+function dayLabel(dateStr: string) {
+  const date = new Date(`${dateStr}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((today.getTime() - date.getTime()) / 86_400_000);
+  const weekday = new Intl.DateTimeFormat("es-CL", { weekday: "long" }).format(date);
+  const capitalized = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+  const day = date.getDate();
+  if (diffDays === 0) return `Hoy · ${capitalized} ${day}`;
+  if (diffDays === 1) return `Ayer · ${capitalized} ${day}`;
+  return `${capitalized} ${day}`;
+}
+
+function groupByDay(transactions: Tx[]) {
+  const groups = new Map<string, Tx[]>();
+  for (const tx of transactions) {
+    const list = groups.get(tx.date) ?? [];
+    list.push(tx);
+    groups.set(tx.date, list);
+  }
+  return [...groups.entries()].map(([date, items]) => {
+    const total = items.reduce((sum, tx) => {
+      if (tx.type === "income" || tx.type === "refund") return sum + tx.amount;
+      if (tx.type === "expense") return sum - tx.amount;
+      return sum;
+    }, 0);
+    return { date, label: dayLabel(date), total, items };
+  });
+}
+
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; category?: string }>;
+  searchParams: Promise<{ month?: string; filter?: string }>;
 }) {
   const params = await searchParams;
   const month = parseMonthParam(params.month);
-  const categoryFilter = params.category ?? "";
+  const filter = params.filter ?? "todas";
   const { supabase, user } = await requireOnboarded();
 
   const categories = await getCategories(supabase, { entity: "personal" });
-  const transactions = await getTransactions(supabase, {
-    month,
-    category: categoryFilter || undefined,
-    limit: 100,
-    types: ["income", "expense", "refund"],
-  });
+  const categoryLabels = new Map(categories.map((c) => [c.id, c.name]));
+
+  const typesFor: Record<string, string[]> = {
+    todas: ["income", "expense", "refund", "transfer"],
+    "sin-categoria": ["income", "expense", "refund"],
+    ingresos: ["income"],
+    gastos: ["expense", "refund"],
+    transferencias: ["transfer"],
+  };
+
+  const [allTransactions, filteredRaw] = await Promise.all([
+    getTransactions(supabase, { month, types: ["income", "expense", "refund"], limit: 200 }),
+    getTransactions(supabase, {
+      month,
+      types: typesFor[filter] ?? typesFor.todas,
+      limit: 200,
+    }),
+  ]);
+
+  const uncategorizedCount = (allTransactions ?? []).filter((tx) => !tx.category).length;
+  const filtered = (
+    filter === "sin-categoria" ? (filteredRaw ?? []).filter((tx) => !tx.category) : filteredRaw
+  ) as Tx[] | null;
+
+  const dayGroups = groupByDay(filtered ?? []);
 
   return (
     <AppShell
       userEmail={user.email ?? ""}
-      title="Transacciones"
-      description="Ledger filtrable por mes y categoría. Editá la categoría inline."
+      title="Movimientos"
+      actions={
+        <Suspense fallback={<span className="text-sm text-muted">…</span>}>
+          <MonthNav month={month} />
+        </Suspense>
+      }
     >
-      <TransactionFilters month={month} category={categoryFilter} categories={categories} />
+      <div className="flex flex-col gap-4">
+        <TransactionTypeFilters uncategorizedCount={uncategorizedCount} />
 
-      {transactions.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-zinc-200 px-4 py-12 text-center text-zinc-500 dark:border-zinc-800">
-          Sin transacciones para este filtro.{" "}
-          <Link href="/" className="underline">
-            Volver al dashboard
-          </Link>
-        </div>
-      ) : (
-        <>
-          <div className="mt-6 hidden overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 sm:block">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/80">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Fecha</th>
-                  <th className="px-4 py-3 font-medium">Descripción</th>
-                  <th className="px-4 py-3 font-medium text-right">Monto</th>
-                  <th className="px-4 py-3 font-medium">Categoría</th>
-                  <th className="px-4 py-3 font-medium">Tipo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.map((tx) => (
-                  <tr
-                    key={tx.id}
-                    className="border-b border-zinc-100 dark:border-zinc-800/80"
-                  >
-                    <td className="whitespace-nowrap px-4 py-3 text-zinc-600 dark:text-zinc-400">
-                      {new Date(tx.date).toLocaleDateString("es-CL")}
-                    </td>
-                    <td className="max-w-xs truncate px-4 py-3">{tx.description ?? "—"}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      <span
-                        className={
-                          tx.type === "income"
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : ""
-                        }
-                      >
-                        {formatCLP(tx.amount, { signed: tx.type === "income" })}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <TransactionCategorySelect
-                        transactionId={tx.id}
-                        currentCategory={tx.category}
-                        categories={categories}
-                        needsReview={tx.needs_review}
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-zinc-500">{typeLabel(tx.type)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {dayGroups.length === 0 ? (
+          <div className="ng-card px-4 py-12 text-center text-sm text-muted">
+            Sin transacciones para este filtro.
           </div>
-
-          <div className="mt-6 space-y-3 sm:hidden">
-            {transactions.map((tx) => (
-              <div
-                key={tx.id}
-                className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"
-              >
-                <div className="flex items-center justify-between text-xs text-zinc-500">
-                  <span>{new Date(tx.date).toLocaleDateString("es-CL")}</span>
-                  <span>{typeLabel(tx.type)}</span>
-                </div>
-                <p className="mt-1 truncate font-medium">{tx.description ?? "—"}</p>
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <TransactionCategorySelect
-                    transactionId={tx.id}
-                    currentCategory={tx.category}
-                    categories={categories}
-                    needsReview={tx.needs_review}
-                  />
-                  <span
-                    className={`shrink-0 font-semibold tabular-nums ${
-                      tx.type === "income" ? "text-emerald-600 dark:text-emerald-400" : ""
-                    }`}
-                  >
-                    {formatCLP(tx.amount, { signed: tx.type === "income" })}
+        ) : (
+          <div className="flex flex-col gap-2">
+            {dayGroups.map((group) => (
+              <div key={group.date} className="mt-2 flex flex-col gap-2">
+                <div className="flex items-baseline justify-between gap-3 px-1">
+                  <span className="text-[11px] tracking-[0.08em] text-faint uppercase">
+                    {group.label}
+                  </span>
+                  <span className="text-xs tabular-nums text-faint">
+                    <Amount>{formatCLP(group.total, { signed: true })}</Amount>
                   </span>
                 </div>
+                {group.items.map((tx) => {
+                  const isIncome = tx.type === "income" || tx.type === "refund";
+                  const isTransfer = tx.type === "transfer";
+                  const uncategorized = !tx.category && !isTransfer;
+                  const Icon = isIncome
+                    ? ArrowDownLeftIcon
+                    : isTransfer
+                      ? ArrowsLeftRightIcon
+                      : uncategorized
+                        ? QuestionIcon
+                        : categoryIcon(categoryLabels.get(tx.category ?? "") ?? "");
+                  const iconColor = isIncome
+                    ? "var(--pos)"
+                    : isTransfer
+                      ? "var(--info)"
+                      : uncategorized
+                        ? "var(--warn)"
+                        : "var(--accent-strong)";
+                  const iconBg = isIncome
+                    ? "var(--pos-soft)"
+                    : isTransfer
+                      ? "var(--info-soft)"
+                      : uncategorized
+                        ? "var(--warn-soft)"
+                        : "var(--surface-2)";
+                  const amountColor = isIncome
+                    ? "var(--pos)"
+                    : isTransfer
+                      ? "var(--info)"
+                      : "var(--text)";
+                  return (
+                    <div key={tx.id} className="ng-card flex items-center gap-3.5 p-3.5">
+                      <span
+                        className="grid size-[38px] flex-none place-items-center rounded-[10px]"
+                        style={{ background: iconBg, color: iconColor }}
+                      >
+                        <Icon size={17} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm">{tx.description ?? "—"}</span>
+                        <span className="block truncate text-xs text-faint">
+                          {isTransfer
+                            ? "Transferencia entre tus cuentas"
+                            : tx.category
+                              ? categoryLabels.get(tx.category) ?? tx.category
+                              : "Sin categoría"}
+                        </span>
+                      </span>
+                      <span
+                        className="flex-none text-sm font-semibold tabular-nums"
+                        style={{ color: amountColor }}
+                      >
+                        <Amount>
+                          {isTransfer
+                            ? formatCLP(tx.amount)
+                            : formatCLP(isIncome ? tx.amount : -tx.amount, { signed: true })}
+                        </Amount>
+                      </span>
+                      {!isTransfer && (
+                        <span className="flex-none">
+                          <TransactionCategorySelect
+                            transactionId={tx.id}
+                            currentCategory={tx.category}
+                            categories={categories}
+                            needsReview={tx.needs_review}
+                          />
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
-        </>
-      )}
+        )}
+      </div>
     </AppShell>
   );
 }

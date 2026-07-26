@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { BankIcon, CaretRightIcon, FunnelIcon } from "@phosphor-icons/react/ssr";
 import { requireOnboarded } from "@/lib/auth/session";
 import { getEmailConnectionStatus } from "@/lib/email/credentials";
 import { AppShell } from "@/components/app-shell";
+import { ThemeSegment } from "@/components/app-shell-client";
+import { PrivacyToggle } from "@/components/privacy-provider";
 import {
   EmailConnectForm,
   EmailDisconnectButton,
@@ -18,35 +21,55 @@ export default async function SettingsPage({
   const { user, supabase } = await requireOnboarded();
   const connection = await getEmailConnectionStatus(user.id);
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("rut")
-    .eq("id", user.id)
-    .single();
+  const [{ count: rulesCount }, { count: accountsCount }] = await Promise.all([
+    supabase.from("categorization_rules").select("*", { count: "exact", head: true }),
+    supabase.from("accounts").select("*", { count: "exact", head: true }).eq("is_archived", false),
+  ]);
 
   return (
-    <AppShell
-      userEmail={user.email ?? ""}
-      title="Configuración"
-      description="Correo IMAP, RUT para cartolas, reglas de categorización y cuentas bancarias."
-    >
+    <AppShell userEmail={user.email ?? ""} title="Configuración">
       {params.error && (
-        <p className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+        <p
+          className="mb-4 rounded-md p-3 text-sm"
+          style={{ background: "var(--neg-soft)", color: "var(--neg)" }}
+        >
           {decodeURIComponent(params.error)}
         </p>
       )}
       {params.connected && (
-        <p className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-300">
+        <p
+          className="mb-4 rounded-md p-3 text-sm"
+          style={{ background: "var(--pos-soft)", color: "var(--pos)" }}
+        >
           Correo conectado correctamente.
         </p>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
-          <h2 className="font-medium">Correo IMAP</h2>
+      <div
+        className="grid gap-4"
+        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}
+      >
+        <div className="ng-card flex flex-col gap-3.5 p-5">
+          <h2 className="m-0 text-base font-medium">Apariencia</h2>
+          <p className="m-0 text-[13px] text-muted">
+            El tema también se cambia desde el menú. &ldquo;Auto&rdquo; sigue lo que tenga tu
+            teléfono o computador.
+          </p>
+          <ThemeSegment />
+          <PrivacyToggle />
+        </div>
+
+        <div className="ng-card flex flex-col gap-3 p-5">
+          <div className="flex items-center gap-2.5">
+            <span
+              className="size-2 rounded-full"
+              style={{ background: connection.connected ? "var(--pos)" : "var(--faint)" }}
+            />
+            <h2 className="m-0 text-base font-medium">Correo</h2>
+          </div>
           {connection.connected ? (
-            <div className="mt-3 space-y-3 text-sm text-zinc-600 dark:text-zinc-400">
-              <p>
+            <div className="flex flex-col gap-3 text-sm text-muted">
+              <p className="m-0">
                 Conectado: {connection.email}
                 {connection.source === "env" ? " (.env)" : ""}
               </p>
@@ -54,50 +77,50 @@ export default async function SettingsPage({
               {connection.source === "db" && <EmailDisconnectButton />}
             </div>
           ) : (
-            <div className="mt-3">
-              <EmailConnectForm />
-            </div>
+            <EmailConnectForm />
           )}
-        </section>
+        </div>
 
-        <section className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
-          <h2 className="font-medium">RUT — cartolas BancoEstado</h2>
-          {!profile?.rut && (
-            <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
-              Requerido para abrir PDFs de cartola CuentaRUT (contraseña = últimos 4
-              dígitos del RUT).
-            </p>
-          )}
-          <RutSettingsForm />
-        </section>
-
-        <section className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
-          <h2 className="font-medium">Categorización</h2>
-          <ul className="mt-3 space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
-            <li>
-              <Link href="/settings/rules" className="underline">
-                Reglas keyword
-              </Link>
-            </li>
-            <li>
-              <code className="text-xs">GOOGLE_GENERATIVE_AI_API_KEY</code> en{" "}
-              <code className="text-xs">apps/web/.env.local</code>
-            </li>
-          </ul>
-        </section>
-
-        <section className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800 lg:col-span-2">
-          <h2 className="font-medium">Cuentas bancarias</h2>
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-            Editá hints (últimos 4 dígitos) para matchear correos al promote.
+        <div className="ng-card flex flex-col gap-3 p-5">
+          <h2 className="m-0 text-base font-medium">RUT para abrir cartolas</h2>
+          <p className="m-0 text-[13px] text-muted">
+            Las cartolas de BancoEstado vienen con clave: los últimos 4 dígitos de tu RUT, sin el
+            verificador.
           </p>
-          <Link
-            href="/settings/accounts"
-            className="mt-3 inline-block text-sm font-medium underline"
-          >
-            Gestionar cuentas →
-          </Link>
-        </section>
+          <RutSettingsForm />
+        </div>
+
+        <div className="ng-card flex flex-col gap-3 p-5">
+          <h2 className="m-0 text-base font-medium">Categorización</h2>
+          <p className="m-0 text-[13px] text-muted">
+            Primero se aplican tus reglas por palabra clave; lo que queda sin match lo propone la
+            IA y vos confirmás.
+          </p>
+          <div className="flex flex-col gap-2">
+            <Link
+              href="/settings/rules"
+              className="flex items-center gap-3 rounded-[10px] bg-surface-2 px-3.5 py-2.5 text-sm hover:bg-accent-soft"
+            >
+              <FunnelIcon size={17} color="var(--muted)" />
+              <span className="flex-1">Reglas por palabra clave</span>
+              <span className="text-xs text-faint">{rulesCount ?? 0}</span>
+              <CaretRightIcon size={15} color="var(--faint)" />
+            </Link>
+            <Link
+              href="/settings/accounts"
+              className="flex items-center gap-3 rounded-[10px] bg-surface-2 px-3.5 py-2.5 text-sm hover:bg-accent-soft"
+            >
+              <BankIcon size={17} color="var(--muted)" />
+              <span className="flex-1">Cuentas bancarias</span>
+              <span className="text-xs text-faint">{accountsCount ?? 0}</span>
+              <CaretRightIcon size={15} color="var(--faint)" />
+            </Link>
+            <p className="m-0 text-xs text-faint">
+              <span className="font-mono">GOOGLE_GENERATIVE_AI_API_KEY</span> en{" "}
+              <span className="font-mono">apps/web/.env.local</span>
+            </p>
+          </div>
+        </div>
       </div>
     </AppShell>
   );

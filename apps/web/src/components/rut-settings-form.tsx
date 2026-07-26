@@ -48,7 +48,7 @@ export function RutSettingsForm() {
   }
 
   if (loading) {
-    return <p className="text-sm text-zinc-500">Cargando…</p>;
+    return <p className="text-sm text-muted">Cargando…</p>;
   }
 
   return (
@@ -66,9 +66,9 @@ export function RutSettingsForm() {
           placeholder="12.345.678-9"
           value={rut}
           onChange={(e) => setRut(e.target.value)}
-          className="mt-1 w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm dark:border-zinc-700"
+          className="ng-input mt-1"
         />
-        <p className="mt-1.5 text-xs text-zinc-500">
+        <p className="mt-1.5 text-xs text-muted">
           BancoEstado encripta las cartolas CuentaRUT. La contraseña del PDF son los{" "}
           <strong>últimos 4 dígitos del RUT</strong>, sin dígito verificador (ej.{" "}
           <span className="font-mono">12.345.678-9 → 5678</span>).
@@ -76,7 +76,7 @@ export function RutSettingsForm() {
       </div>
 
       {savedMasked && (
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-muted">
           Guardado: <span className="font-mono">{savedMasked}</span>
           {passwordHint && (
             <>
@@ -88,12 +88,18 @@ export function RutSettingsForm() {
       )}
 
       {message && (
-        <p className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+        <p
+          className="rounded-md px-3 py-2 text-sm"
+          style={{ background: "var(--pos-soft)", color: "var(--pos)" }}
+        >
           {message}
         </p>
       )}
       {error && (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+        <p
+          className="rounded-md px-3 py-2 text-sm"
+          style={{ background: "var(--neg-soft)", color: "var(--neg)" }}
+        >
           {error}
         </p>
       )}

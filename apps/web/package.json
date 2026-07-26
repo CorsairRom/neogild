@@ -13,13 +13,13 @@
   "dependencies": {
     "@neogild/core": "*",
     "@neogild/gmail": "*",
+    "@phosphor-icons/react": "^2.1.10",
     "@supabase/ssr": "^0.12.3",
     "@supabase/supabase-js": "^2.110.8",
     "next": "15.3.3",
     "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "recharts": "^2.15.4"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

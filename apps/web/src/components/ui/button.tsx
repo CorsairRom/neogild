@@ -1,17 +1,17 @@
 import type { ButtonHTMLAttributes } from "react";
 
-export type ButtonVariant = "primary" | "secondary";
+export type ButtonVariant = "primary" | "secondary" | "ghost";
 export type ButtonSize = "sm" | "md";
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: "px-2.5 py-1 text-xs",
-  md: "px-4 py-2 text-sm",
+  sm: "text-xs px-3 py-1.5",
+  md: "text-sm px-3.5 py-2.5",
 };
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-accent-foreground font-semibold shadow-sm hover:bg-accent-hover",
-  secondary:
-    "border border-zinc-300 font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900",
+  primary: "ng-btn-primary",
+  secondary: "ng-btn-secondary",
+  ghost: "ng-btn-ghost",
 };
 
 export function buttonClasses(
@@ -19,7 +19,7 @@ export function buttonClasses(
   size: ButtonSize = "md",
   className = "",
 ) {
-  return `rounded-md transition disabled:cursor-not-allowed disabled:opacity-50 ${sizeClasses[size]} ${variantClasses[variant]} ${className}`.trim();
+  return `ng-btn ${variantClasses[variant]} ${sizeClasses[size]} ${className}`.trim();
 }
 
 export function Button({

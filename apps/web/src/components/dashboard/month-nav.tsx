@@ -1,8 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
 import { shiftMonth } from "@neogild/core";
+import { formatMonthTitle } from "@/lib/format";
 
 export function MonthNav({ month }: { month: string }) {
   const router = useRouter();
@@ -17,35 +18,27 @@ export function MonthNav({ month }: { month: string }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex items-center gap-0">
       <button
         type="button"
         onClick={() => go(prev)}
-        className="rounded-md border border-zinc-300 px-2.5 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
         aria-label="Mes anterior"
+        className="grid h-9 w-9 place-items-center rounded-l-lg border border-r-0 border-line bg-transparent text-muted hover:bg-surface hover:text-text"
       >
-        ←
+        <CaretLeftIcon size={15} />
       </button>
-      <input
-        type="month"
-        value={month}
-        onChange={(e) => e.target.value && go(e.target.value)}
-        className="rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-      />
+      <span className="flex h-9 items-center gap-2 border border-line bg-transparent px-3.5 text-sm font-medium whitespace-nowrap">
+        <CalendarBlankIcon size={15} color="var(--accent)" />
+        {formatMonthTitle(month)}
+      </span>
       <button
         type="button"
         onClick={() => go(next)}
-        className="rounded-md border border-zinc-300 px-2.5 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
         aria-label="Mes siguiente"
+        className="grid h-9 w-9 place-items-center rounded-r-lg border border-l-0 border-line bg-transparent text-muted hover:bg-surface hover:text-text"
       >
-        →
+        <CaretRightIcon size={15} />
       </button>
-      <Link
-        href="/transactions"
-        className="text-sm text-zinc-600 underline-offset-2 hover:underline dark:text-zinc-400"
-      >
-        Ver detalle
-      </Link>
     </div>
   );
 }

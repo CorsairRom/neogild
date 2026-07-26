@@ -18,7 +18,7 @@ export default async function RulesPage() {
       userEmail={user.email ?? ""}
       title="Reglas de categorización"
       actions={
-        <Link href="/settings" className="text-sm text-zinc-500 hover:underline">
+        <Link href="/settings" className="text-sm text-muted hover:underline">
           ← Configuración
         </Link>
       }

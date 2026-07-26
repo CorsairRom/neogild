@@ -1,9 +1,8 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { formatCLP } from "@/lib/format";
-import { Button } from "@/components/ui/button";
 
 type Category = { id: string; name: string; parent_id: string | null };
 
@@ -51,11 +50,8 @@ export function TransactionCategorySelect({
       value={value}
       disabled={loading}
       onChange={(e) => handleChange(e.target.value)}
-      className={`max-w-[11rem] rounded border px-2 py-1 text-xs ${
-        needsReview || !currentCategory
-          ? "border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30"
-          : "border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-950"
-      }`}
+      className="ng-input max-w-[11rem] py-1.5 text-xs"
+      style={needsReview || !currentCategory ? { borderColor: "var(--warn)", background: "var(--warn-soft)" } : undefined}
     >
       {!currentCategory && <option value="">Elegir…</option>}
       {leafCategories.map((c) => (
@@ -67,52 +63,32 @@ export function TransactionCategorySelect({
   );
 }
 
-export function TransactionFilters({
-  month,
-  category,
-  categories,
-}: {
-  month: string;
-  category: string;
-  categories: Category[];
-}) {
-  const leafCategories = categories.filter(
-    (c) =>
-      c.parent_id !== null &&
-      !c.id.startsWith("ingreso.") &&
-      !c.id.startsWith("spa.") &&
-      c.id !== "transfer",
-  );
+const FILTERS: Array<{ value: string; label: (n: number) => string }> = [
+  { value: "todas", label: () => "Todo" },
+  { value: "sin-categoria", label: (n) => `Sin categoría · ${n}` },
+  { value: "ingresos", label: () => "Ingresos" },
+  { value: "gastos", label: () => "Gastos" },
+  { value: "transferencias", label: () => "Transferencias" },
+];
+
+export function TransactionTypeFilters({ uncategorizedCount }: { uncategorizedCount: number }) {
+  const searchParams = useSearchParams();
+  const active = searchParams.get("filter") ?? "todas";
 
   return (
-    <form className="flex flex-wrap items-end gap-3" method="get">
-      <label className="space-y-1 text-xs">
-        <span className="font-medium text-zinc-500">Mes</span>
-        <input
-          type="month"
-          name="month"
-          defaultValue={month}
-          className="block rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-        />
-      </label>
-      <label className="space-y-1 text-xs">
-        <span className="font-medium text-zinc-500">Categoría</span>
-        <select
-          name="category"
-          defaultValue={category}
-          className="block rounded-md border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-        >
-          <option value="">Todas</option>
-          {leafCategories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <Button type="submit">Filtrar</Button>
-    </form>
+    <div className="flex gap-2 overflow-x-auto pb-0.5">
+      {FILTERS.map((f) => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (f.value === "todas") params.delete("filter");
+        else params.set("filter", f.value);
+        const href = `/transactions${params.toString() ? `?${params.toString()}` : ""}`;
+        const isActive = active === f.value;
+        return (
+          <Link key={f.value} href={href} className={`ng-pill ${isActive ? "ng-pill-on" : ""}`}>
+            {f.label(uncategorizedCount)}
+          </Link>
+        );
+      })}
+    </div>
   );
 }
-
-export { formatCLP };

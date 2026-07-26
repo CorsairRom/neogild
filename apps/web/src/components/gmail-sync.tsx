@@ -137,8 +137,8 @@ export function SyncButton({ since }: { since?: string }) {
           {backfillLoading ? "Importando histórico…" : "Sync histórico + cartolas"}
         </Button>
       </div>
-      {result && <p className="text-sm text-green-700 dark:text-green-400">{result}</p>}
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
+      {result && <p className="text-sm" style={{ color: "var(--pos)" }}>{result}</p>}
+      {error && <p className="text-sm" style={{ color: "var(--neg)" }}>{error}</p>}
     </div>
   );
 }
@@ -176,7 +176,7 @@ export function EmailConnectForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div className="space-y-1">
-        <label className="text-xs font-medium text-zinc-500" htmlFor="imap-user">
+        <label className="text-xs font-medium text-muted" htmlFor="imap-user">
           Usuario Gmail (IMAP)
         </label>
         <input
@@ -186,12 +186,12 @@ export function EmailConnectForm() {
           placeholder="neogild@gmail.com"
           value={imapUser}
           onChange={(e) => setImapUser(e.target.value)}
-          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          className="ng-input"
           required
         />
       </div>
       <div className="space-y-1">
-        <label className="text-xs font-medium text-zinc-500" htmlFor="app-password">
+        <label className="text-xs font-medium text-muted" htmlFor="app-password">
           App Password (16 caracteres)
         </label>
         <input
@@ -201,18 +201,16 @@ export function EmailConnectForm() {
           placeholder="xxxx xxxx xxxx xxxx"
           value={appPassword}
           onChange={(e) => setAppPassword(e.target.value)}
-          className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          className="ng-input"
           required
         />
       </div>
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-muted">
         Gmail → Settings → Forwarding and POP/IMAP → Enable IMAP. Google Account →
         Security → App Passwords.
       </p>
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-      {success && (
-        <p className="text-sm text-green-700 dark:text-green-400">Conectado.</p>
-      )}
+      {error && <p className="text-sm" style={{ color: "var(--neg)" }}>{error}</p>}
+      {success && <p className="text-sm" style={{ color: "var(--pos)" }}>Conectado.</p>}
       <Button type="submit" disabled={loading}>
         {loading ? "Probando conexión…" : "Conectar IMAP"}
       </Button>
@@ -234,7 +232,7 @@ export function EmailDisconnectButton() {
       type="button"
       onClick={handleDisconnect}
       disabled={loading}
-      className="text-sm text-zinc-500 underline hover:text-zinc-700 dark:hover:text-zinc-300"
+      className="text-sm text-muted underline hover:text-text"
     >
       {loading ? "Desconectando…" : "Desconectar"}
     </button>
