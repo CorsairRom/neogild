@@ -1,22 +1,22 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { requireOnboarded } from "@/lib/auth/session";
 import { getEmailConnectionStatus } from "@/lib/email/credentials";
-import { AppShell, StatCard } from "@/components/app-shell";
+import { AppShell } from "@/components/app-shell";
 import { MonthNav } from "@/components/dashboard/month-nav";
 import {
-  CategoryPieChart,
-  DailyBarChart,
-  TrendLineChart,
-} from "@/components/dashboard/charts";
+  AccountsSummaryCard,
+  CategoryBreakdown,
+  EmailStatusCard,
+  HeroBalanceCard,
+  MiniStat,
+  ReviewNudge,
+  TrendChart,
+} from "@/components/dashboard/nocturne";
 import { SyncButton } from "@/components/gmail-sync";
-import { AccountBalancesPanel } from "@/components/account-balances-panel";
-import { formatCLP, formatMonthTitle } from "@/lib/format";
+import { formatCLP } from "@/lib/format";
 import {
-  getAccountMonthActivity,
   getCategories,
   getCategoryBreakdown,
-  getDailyExpenses,
   getMonthlyBuckets,
   getMonthlyTrend,
   getPersonalAccountBalances,
@@ -24,6 +24,30 @@ import {
 } from "@neogild/core";
 
 export const dynamic = "force-dynamic";
+
+function subtypeLabel(subtype: string) {
+  switch (subtype) {
+    case "debit":
+      return "Cuenta corriente";
+    case "credit_card":
+      return "Tarjeta de crédito";
+    case "cash":
+      return "Efectivo";
+    default:
+      return subtype;
+  }
+}
+
+function timeAgo(iso: string | null | undefined) {
+  if (!iso) return "sin sync todavía";
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const min = Math.round(diffMs / 60000);
+  if (min < 1) return "último sync hace instantes";
+  if (min < 60) return `último sync hace ${min} min`;
+  const hrs = Math.round(min / 60);
+  if (hrs < 24) return `último sync hace ${hrs} h`;
+  return `último sync hace ${Math.round(hrs / 24)} d`;
+}
 
 export default async function DashboardPage({
   searchParams,
@@ -38,11 +62,9 @@ export default async function DashboardPage({
   const categories = await getCategories(supabase, { entity: "personal" });
   const categoryLabels = new Map(categories.map((c) => [c.id, c.name]));
 
-  const [buckets, breakdown, daily, trend, reviewResult, syncResult, accounts, accountActivity] =
-    await Promise.all([
+  const [buckets, breakdown, trend, reviewResult, syncResult, accounts] = await Promise.all([
     getMonthlyBuckets(supabase, { month }),
     getCategoryBreakdown(supabase, month, categoryLabels),
-    getDailyExpenses(supabase, month),
     getMonthlyTrend(supabase, month, 6),
     supabase
       .from("transactions")
@@ -51,7 +73,6 @@ export default async function DashboardPage({
       .in("type", ["income", "expense", "refund"]),
     supabase.from("sync_state").select("gmail_watermark").maybeSingle(),
     getPersonalAccountBalances(supabase),
-    getAccountMonthActivity(supabase, month),
   ]);
 
   const reviewCount = reviewResult.count ?? 0;
@@ -62,119 +83,72 @@ export default async function DashboardPage({
 
   const totalAccountBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
 
+  const accountsForSummary = accounts.slice(0, 3).map((a) => ({
+    id: a.id,
+    name: a.name,
+    kind: subtypeLabel(a.subtype),
+    subtype: a.subtype,
+    balance: a.balance,
+  }));
+
+  const sparkline = trend.map((p) => p.ingresos - p.gastos);
+
   return (
     <AppShell
       userEmail={user.email ?? ""}
-      title={formatMonthTitle(month)}
-      description="Distribución de gastos, tendencia y sync de correos."
+      title="Resumen"
       actions={
-        <Suspense fallback={<span className="text-sm text-zinc-500">…</span>}>
+        <Suspense fallback={<span className="text-sm text-muted">…</span>}>
           <MonthNav month={month} />
         </Suspense>
       }
     >
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Ingresos" value={formatCLP(buckets.income)} tone="positive" />
-        <StatCard label="Gastos" value={formatCLP(gastos)} />
-        <StatCard
-          label="Disponible"
-          value={formatCLP(buckets.disponible, { signed: true })}
-          tone={buckets.disponible < 0 ? "warn" : "default"}
-          hint="Ingresos − gastos del mes"
-        />
-        <StatCard
-          label="Por categorizar"
-          value={String(reviewCount)}
-          tone={reviewCount > 0 ? "warn" : "default"}
-          href="/review"
-          hint={reviewCount > 0 ? "Revisar transacciones" : undefined}
-        />
-      </section>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <div className="flex min-w-0 flex-col gap-5">
+          <HeroBalanceCard
+            totalBalance={totalAccountBalance}
+            deltaLabel={
+              buckets.disponible !== 0 ? formatCLP(buckets.disponible, { signed: true }) : null
+            }
+            deltaPositive={buckets.disponible >= 0}
+            syncLabel={timeAgo(syncState?.gmail_watermark)}
+            sparkline={sparkline.length > 1 ? sparkline : [0, 0]}
+          />
 
-      <AccountBalancesPanel
-        accounts={accounts}
-        activity={accountActivity}
-        totalBalance={totalAccountBalance}
-      />
-
-      <section className="mt-8 grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-          <h2 className="mb-4 text-sm font-medium">Gastos por categoría</h2>
-          <CategoryPieChart data={breakdown} />
-        </div>
-        <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-          <h2 className="mb-4 text-sm font-medium">Gasto diario</h2>
-          <DailyBarChart data={daily} />
-        </div>
-      </section>
-
-      <section className="mt-6 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-        <h2 className="mb-4 text-sm font-medium">Tendencia (6 meses)</h2>
-        <TrendLineChart data={trend} />
-      </section>
-
-      <section className="mt-6 grid gap-4 lg:grid-cols-3">
-        <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 lg:col-span-2">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-medium">Buckets del mes</h2>
-            {buckets.por_categorizar > 0 && (
-              <Link href="/review" className="text-xs text-amber-600 underline">
-                Revisar {formatCLP(buckets.por_categorizar)}
-              </Link>
-            )}
+          <div className="grid grid-cols-3 gap-3">
+            <MiniStat label="Entró" value={formatCLP(buckets.income)} tone="pos" />
+            <MiniStat label="Salió" value={formatCLP(gastos)} tone="neg" />
+            <MiniStat
+              label="Te queda"
+              value={formatCLP(buckets.disponible, { signed: true })}
+              tone={buckets.disponible < 0 ? "neg" : undefined}
+            />
           </div>
-          <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-            <BucketItem label="Necesidades" value={buckets.necesidades} />
-            <BucketItem label="Consumo" value={buckets.consumo} />
-            <BucketItem label="Ahorro" value={buckets.ahorro} />
-            <BucketItem label="Sin categoría" value={buckets.por_categorizar} warn />
-          </dl>
-        </div>
-        <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-          <h2 className="text-sm font-medium">Sync correos</h2>
-          <p className="mt-2 text-xs text-zinc-500">
-            {connection.connected
-              ? `Conectado${connection.email ? `: ${connection.email}` : ""}`
-              : "IMAP no conectado"}
-          </p>
-          {connection.connected ? (
-            <div className="mt-3 space-y-2">
-              <SyncButton />
-              {syncState?.gmail_watermark && (
-                <p className="text-xs text-zinc-500">
-                  Último sync:{" "}
-                  {new Date(syncState.gmail_watermark).toLocaleString("es-CL")}
-                </p>
-              )}
-            </div>
-          ) : (
-            <Link href="/settings" className="mt-3 inline-block text-sm underline">
-              Configurar correo
-            </Link>
-          )}
-        </div>
-      </section>
-    </AppShell>
-  );
-}
 
-function BucketItem({
-  label,
-  value,
-  warn,
-}: {
-  label: string;
-  value: number;
-  warn?: boolean;
-}) {
-  return (
-    <div>
-      <dt className="text-xs text-zinc-500">{label}</dt>
-      <dd
-        className={`mt-0.5 font-medium tabular-nums ${warn && value > 0 ? "text-amber-600 dark:text-amber-400" : ""}`}
-      >
-        {formatCLP(value)}
-      </dd>
-    </div>
+          <ReviewNudge count={reviewCount} amount={buckets.por_categorizar} />
+
+          <div className="ng-card ng-rise flex flex-col gap-4 p-5">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="m-0 text-base font-medium">En qué se fue</h2>
+              <a href="/transactions" className="ng-btn ng-btn-ghost !p-0 text-[13px]">
+                Ver movimientos
+              </a>
+            </div>
+            <CategoryBreakdown categories={breakdown.slice(0, 5)} />
+          </div>
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-5">
+          <AccountsSummaryCard accounts={accountsForSummary} />
+          <TrendChart points={trend} />
+          <EmailStatusCard
+            connected={connection.connected}
+            email={connection.email}
+            syncLabel={timeAgo(syncState?.gmail_watermark)}
+            syncSlot={<SyncButton />}
+          />
+        </div>
+      </div>
+    </AppShell>
   );
 }

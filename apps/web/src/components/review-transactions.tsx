@@ -1,12 +1,17 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { typeLabel } from "@/lib/format";
+import {
+  CheckCircleIcon,
+  QuestionIcon,
+  SparkleIcon,
+} from "@phosphor-icons/react";
+import { formatCLP } from "@/lib/format";
+import { categoryIcon } from "@/lib/category-icon";
 
 type Category = { id: string; name: string; parent_id: string | null };
-type ReviewTx = {
+export type ReviewTx = {
   id: string;
   description: string | null;
   amount: number;
@@ -15,27 +20,9 @@ type ReviewTx = {
   category: string | null;
   needs_review: boolean;
 };
+export type Suggestion = { id: string; label: string };
 
-function formatCLP(amount: number) {
-  return new Intl.NumberFormat("es-CL", {
-    style: "currency",
-    currency: "CLP",
-    maximumFractionDigits: 0,
-  }).format(Math.abs(amount));
-}
-
-function typeBadgeClass(type: string) {
-  switch (type) {
-    case "income":
-      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200";
-    case "expense":
-      return "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200";
-    case "transfer":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200";
-    default:
-      return "bg-zinc-100 text-zinc-600 dark:bg-zinc-800";
-  }
-}
+const ACCEPT_THRESHOLD = 100;
 
 async function patchCategory(id: string, category: string) {
   const res = await fetch(`/api/transactions/${id}/category`, {
@@ -47,348 +34,241 @@ async function patchCategory(id: string, category: string) {
   if (!res.ok) throw new Error(data.error ?? "Error");
 }
 
-function useReviewRowState(tx: ReviewTx, onSaved: () => void) {
-  const [category, setCategory] = useState(tx.category ?? "");
-  const [loading, setLoading] = useState(false);
+export function ReviewSwipeCard({
+  tx,
+  suggested,
+  alt1,
+  alt2,
+  categories,
+  onResolved,
+}: {
+  tx: ReviewTx;
+  suggested: Suggestion | null;
+  alt1: Suggestion | null;
+  alt2: Suggestion | null;
+  categories: Category[];
+  onResolved: () => void;
+}) {
+  const [dragX, setDragX] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showOther, setShowOther] = useState(false);
+  const startX = useRef(0);
+  const draggingRef = useRef(false);
+  const dragXRef = useRef(0);
+  const savingRef = useRef(false);
+  const leafCategories = categories.filter((c) => c.parent_id !== null);
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    if (!category) return;
-    setLoading(true);
+  async function commit(categoryId: string | undefined) {
+    if (!categoryId || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     setError(null);
+    setDragging(false);
+    setDragX(420);
     try {
-      await patchCategory(tx.id, category);
-      onSaved();
+      await patchCategory(tx.id, categoryId);
+      onResolved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
-    } finally {
-      setLoading(false);
+      setDragX(0);
+      savingRef.current = false;
+      setSaving(false);
     }
   }
 
-  return { category, setCategory, loading, error, handleSave };
-}
-
-export function ReviewTransactionsTable({
-  transactions,
-  categories,
-}: {
-  transactions: ReviewTx[];
-  categories: Category[];
-}) {
-  const [rows, setRows] = useState(transactions);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [bulkCategory, setBulkCategory] = useState("");
-  const [bulkLoading, setBulkLoading] = useState(false);
-  const [bulkError, setBulkError] = useState<string | null>(null);
-
-  const leafCategories = useMemo(
-    () => categories.filter((c) => c.parent_id !== null),
-    [categories],
-  );
-
-  function toggleSelect(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if ((e.target as HTMLElement).closest("[data-no-drag]")) return;
+    if (savingRef.current) return;
+    startX.current = e.clientX;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    draggingRef.current = true;
+    setDragging(true);
   }
 
-  function toggleSelectAll() {
-    setSelected((prev) => (prev.size === rows.length ? new Set() : new Set(rows.map((r) => r.id))));
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!draggingRef.current) return;
+    const dx = Math.max(0, e.clientX - startX.current);
+    dragXRef.current = dx;
+    setDragX(dx);
   }
 
-  function handleRowSaved(id: string) {
-    setRows((prev) => prev.filter((r) => r.id !== id));
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-  }
-
-  async function handleBulkApply() {
-    if (!bulkCategory || selected.size === 0) return;
-    setBulkLoading(true);
-    setBulkError(null);
-
-    const ids = [...selected];
-    const results = await Promise.allSettled(ids.map((id) => patchCategory(id, bulkCategory)));
-
-    const failed = new Set<string>();
-    results.forEach((result, i) => {
-      if (result.status === "rejected") failed.add(ids[i]);
-    });
-
-    setRows((prev) => prev.filter((r) => !ids.includes(r.id) || failed.has(r.id)));
-    setSelected(failed);
-    setBulkCategory("");
-    setBulkLoading(false);
-    if (failed.size > 0) {
-      setBulkError(`${failed.size} de ${ids.length} no se pudieron categorizar. Reintentá.`);
+  function onPointerUp() {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    setDragging(false);
+    if (dragXRef.current > ACCEPT_THRESHOLD && suggested) {
+      commit(suggested.id);
+    } else {
+      dragXRef.current = 0;
+      setDragX(0);
     }
   }
 
-  if (rows.length === 0) {
-    return (
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-        <p className="px-4 py-12 text-center text-sm text-zinc-500">Todo categorizado.</p>
-      </div>
-    );
-  }
+  const revealOpacity = Math.min(1, dragX / ACCEPT_THRESHOLD);
+  const uncategorized = !tx.category;
+  const Icon = uncategorized ? QuestionIcon : categoryIcon(tx.category ?? "");
 
   return (
-    <div>
-      {selected.size > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-          <span className="font-medium">{selected.size} seleccionadas</span>
-          <select
-            value={bulkCategory}
-            onChange={(e) => setBulkCategory(e.target.value)}
-            className="rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+    <div className="ng-rise relative overflow-hidden rounded-[14px]" style={{ background: "var(--pos)" }}>
+      <div
+        className="absolute inset-0 flex items-center gap-2 pl-5 text-[13px] font-semibold text-on-accent"
+        style={{ opacity: revealOpacity }}
+      >
+        <CheckCircleIcon size={18} weight="fill" />
+        Aceptar
+      </div>
+      <div
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        className="ng-card relative flex touch-pan-y flex-col gap-3.5 p-4"
+        style={{
+          transform: `translateX(${dragX}px)`,
+          transition: dragging ? "none" : "transform 220ms cubic-bezier(0.22,1,0.36,1)",
+          cursor: dragging ? "grabbing" : "grab",
+        }}
+      >
+        <div className="flex items-start gap-3">
+          <span
+            className="grid size-9 flex-none place-items-center rounded-[10px]"
+            style={{
+              background: uncategorized ? "var(--warn-soft)" : "var(--surface-2)",
+              color: uncategorized ? "var(--warn)" : "var(--accent-strong)",
+            }}
           >
-            <option value="">Elegir categoría…</option>
+            <Icon size={16} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium">{tx.description ?? "—"}</span>
+            <span className="mt-0.5 block text-xs text-faint">
+              {new Date(tx.date).toLocaleDateString("es-CL", { day: "numeric", month: "short" })}
+            </span>
+          </span>
+          <span className="flex-none text-[15px] font-semibold tabular-nums">
+            {formatCLP(tx.amount, { signed: tx.type === "income" })}
+          </span>
+        </div>
+
+        {!showOther ? (
+          <div data-no-drag className="flex flex-wrap gap-2">
+            {suggested && (
+              <button
+                type="button"
+                onClick={() => commit(suggested.id)}
+                disabled={saving}
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium"
+                style={{
+                  background: "var(--accent-soft)",
+                  color: "var(--accent-strong)",
+                  boxShadow: "inset 0 0 0 1px var(--accent)",
+                }}
+              >
+                <SparkleIcon size={13} weight="fill" />
+                {suggested.label}
+              </button>
+            )}
+            {alt1 && (
+              <button
+                type="button"
+                onClick={() => commit(alt1.id)}
+                disabled={saving}
+                className="rounded-full px-3 py-1.5 text-[13px] text-muted"
+                style={{ boxShadow: "inset 0 0 0 1px var(--line)" }}
+              >
+                {alt1.label}
+              </button>
+            )}
+            {alt2 && (
+              <button
+                type="button"
+                onClick={() => commit(alt2.id)}
+                disabled={saving}
+                className="rounded-full px-3 py-1.5 text-[13px] text-muted"
+                style={{ boxShadow: "inset 0 0 0 1px var(--line)" }}
+              >
+                {alt2.label}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowOther(true)}
+              disabled={saving}
+              className="rounded-full px-3 py-1.5 text-[13px] text-faint"
+              style={{ boxShadow: "inset 0 0 0 1px var(--line)" }}
+            >
+              Otra…
+            </button>
+          </div>
+        ) : (
+          <select
+            data-no-drag
+            autoFocus
+            defaultValue=""
+            onChange={(e) => e.target.value && commit(e.target.value)}
+            className="ng-input"
+            disabled={saving}
+          >
+            <option value="" disabled>
+              Elegir categoría…
+            </option>
             {leafCategories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
           </select>
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleBulkApply}
-            disabled={bulkLoading || !bulkCategory}
-          >
-            {bulkLoading ? "Aplicando…" : `Aplicar a ${selected.size}`}
-          </Button>
-          <button
-            type="button"
-            onClick={() => setSelected(new Set())}
-            className="text-xs text-zinc-500 underline"
-          >
-            Cancelar selección
-          </button>
-          {bulkError && <p className="w-full text-xs text-red-600 dark:text-red-400">{bulkError}</p>}
-        </div>
-      )}
-
-      <div className="hidden overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 sm:block">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/80">
-            <tr>
-              <th className="w-10 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={selected.size === rows.length}
-                  onChange={toggleSelectAll}
-                  aria-label="Seleccionar todas"
-                />
-              </th>
-              <th className="px-4 py-3 font-medium">Fecha</th>
-              <th className="px-4 py-3 font-medium">Descripción</th>
-              <th className="px-4 py-3 font-medium text-right">Monto</th>
-              <th className="px-4 py-3 font-medium">Tipo</th>
-              <th className="px-4 py-3 font-medium">Estado</th>
-              <th className="px-4 py-3 font-medium">Categoría</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((tx) => (
-              <ReviewTransactionRow
-                key={tx.id}
-                tx={tx}
-                categories={categories}
-                selected={selected.has(tx.id)}
-                onToggleSelect={() => toggleSelect(tx.id)}
-                onSaved={() => handleRowSaved(tx.id)}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="space-y-3 sm:hidden">
-        {rows.map((tx) => (
-          <ReviewTransactionCard
-            key={tx.id}
-            tx={tx}
-            categories={categories}
-            selected={selected.has(tx.id)}
-            onToggleSelect={() => toggleSelect(tx.id)}
-            onSaved={() => handleRowSaved(tx.id)}
-          />
-        ))}
+        )}
+        {error && <p className="text-xs" style={{ color: "var(--neg)" }}>{error}</p>}
       </div>
     </div>
   );
 }
 
-function ReviewTransactionRow({
-  tx,
+export type CardSuggestions = {
+  suggested: Suggestion | null;
+  alt1: Suggestion | null;
+  alt2: Suggestion | null;
+};
+
+export function ReviewBoard({
+  transactions,
   categories,
-  selected,
-  onToggleSelect,
-  onSaved,
+  suggestions,
 }: {
-  tx: ReviewTx;
+  transactions: ReviewTx[];
   categories: Category[];
-  selected: boolean;
-  onToggleSelect: () => void;
-  onSaved: () => void;
+  suggestions: Record<string, CardSuggestions>;
 }) {
-  const { category, setCategory, loading, error, handleSave } = useReviewRowState(tx, onSaved);
-  const leafCategories = categories.filter((c) => c.parent_id !== null);
+  const [rows, setRows] = useState(transactions);
+
+  if (rows.length === 0) {
+    return (
+      <div className="ng-card px-4 py-12 text-center text-sm text-muted">Todo categorizado.</div>
+    );
+  }
 
   return (
-    <tr className="border-b border-zinc-100 dark:border-zinc-800">
-      <td className="px-4 py-2">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={onToggleSelect}
-          aria-label={`Seleccionar ${tx.description ?? "transacción"}`}
-        />
-      </td>
-      <td className="px-3 py-2 whitespace-nowrap">
-        {new Date(tx.date).toLocaleDateString("es-CL")}
-      </td>
-      <td className="px-3 py-2">{tx.description ?? "—"}</td>
-      <td className="px-3 py-2 tabular-nums">
-        <span className={tx.type === "income" ? "text-emerald-600 dark:text-emerald-400" : ""}>
-          {tx.type === "expense" ? "−" : tx.type === "income" ? "+" : ""}
-          {formatCLP(tx.amount)}
-        </span>
-      </td>
-      <td className="px-3 py-2">
-        <span
-          className={`rounded px-2 py-0.5 text-xs font-medium ${typeBadgeClass(tx.type)}`}
-        >
-          {typeLabel(tx.type)}
-        </span>
-      </td>
-      <td className="px-3 py-2">
-        {tx.needs_review && tx.category ? (
-          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-            revisar
-          </span>
-        ) : tx.category ? (
-          <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-800 dark:bg-green-950 dark:text-green-200">
-            ok
-          </span>
-        ) : (
-          <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800">
-            sin categoría
-          </span>
-        )}
-      </td>
-      <td className="px-3 py-2">
-        <form onSubmit={handleSave} className="flex flex-wrap items-center gap-2">
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-            required
-          >
-            <option value="">Elegir…</option>
-            {leafCategories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <Button type="submit" size="sm" disabled={loading || !category}>
-            {loading ? "…" : "Guardar"}
-          </Button>
-        </form>
-        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-      </td>
-    </tr>
-  );
-}
-
-function ReviewTransactionCard({
-  tx,
-  categories,
-  selected,
-  onToggleSelect,
-  onSaved,
-}: {
-  tx: ReviewTx;
-  categories: Category[];
-  selected: boolean;
-  onToggleSelect: () => void;
-  onSaved: () => void;
-}) {
-  const { category, setCategory, loading, error, handleSave } = useReviewRowState(tx, onSaved);
-  const leafCategories = categories.filter((c) => c.parent_id !== null);
-
-  return (
-    <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-      <div className="flex items-start justify-between gap-3">
-        <label className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={onToggleSelect}
-            aria-label={`Seleccionar ${tx.description ?? "transacción"}`}
-            className="mt-0.5"
+    <div
+      className="grid gap-3.5"
+      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}
+    >
+      {rows.map((tx) => {
+        const s = suggestions[tx.id] ?? { suggested: null, alt1: null, alt2: null };
+        return (
+          <ReviewSwipeCard
+            key={tx.id}
+            tx={tx}
+            suggested={s.suggested}
+            alt1={s.alt1}
+            alt2={s.alt2}
+            categories={categories}
+            onResolved={() => setRows((prev) => prev.filter((r) => r.id !== tx.id))}
           />
-          <div>
-            <p className="font-medium">{tx.description ?? "—"}</p>
-            <p className="text-xs text-zinc-500">
-              {new Date(tx.date).toLocaleDateString("es-CL")} · {typeLabel(tx.type)}
-            </p>
-          </div>
-        </label>
-        <span
-          className={`shrink-0 font-semibold tabular-nums ${
-            tx.type === "income" ? "text-emerald-600 dark:text-emerald-400" : ""
-          }`}
-        >
-          {tx.type === "expense" ? "−" : tx.type === "income" ? "+" : ""}
-          {formatCLP(tx.amount)}
-        </span>
-      </div>
-
-      <div className="mt-2">
-        {tx.needs_review && tx.category ? (
-          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-            revisar
-          </span>
-        ) : tx.category ? (
-          <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-800 dark:bg-green-950 dark:text-green-200">
-            ok
-          </span>
-        ) : (
-          <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800">
-            sin categoría
-          </span>
-        )}
-      </div>
-
-      <form onSubmit={handleSave} className="mt-3 flex flex-wrap items-center gap-2">
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className="flex-1 rounded border border-zinc-300 bg-white px-2 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          required
-        >
-          <option value="">Elegir…</option>
-          {leafCategories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <Button type="submit" size="sm" disabled={loading || !category}>
-          {loading ? "…" : "Guardar"}
-        </Button>
-      </form>
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        );
+      })}
     </div>
   );
 }
@@ -418,15 +298,11 @@ export function CategorizeButton() {
 
   return (
     <div className="space-y-1">
-      <button
-        type="button"
-        onClick={handleRun}
-        disabled={loading}
-        className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
-      >
-        {loading ? "Clasificando…" : "Clasificar pendientes (LLM)"}
+      <button type="button" onClick={handleRun} disabled={loading} className="ng-btn ng-btn-primary">
+        <SparkleIcon size={16} />
+        {loading ? "Clasificando…" : "Sugerir con IA"}
       </button>
-      {result && <p className="text-xs text-zinc-500">{result}</p>}
+      {result && <p className="text-xs text-muted">{result}</p>}
     </div>
   );
 }

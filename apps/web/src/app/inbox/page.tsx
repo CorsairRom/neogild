@@ -1,7 +1,15 @@
 import Link from "next/link";
+import {
+  CheckCircleIcon,
+  ClockIcon,
+  FilePdfIcon,
+  TrashIcon,
+  WarningCircleIcon,
+} from "@phosphor-icons/react/ssr";
 import { requireOnboarded } from "@/lib/auth/session";
 import { AppShell } from "@/components/app-shell";
 import { SyncButton } from "@/components/gmail-sync";
+import { Amount } from "@/components/privacy-provider";
 
 export const dynamic = "force-dynamic";
 
@@ -14,25 +22,36 @@ function formatCLP(amount: number | null) {
   }).format(amount);
 }
 
-function statusBadge(status: string) {
-  const colors: Record<string, string> = {
-    pending: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
-    pending_attachment: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200",
-    error: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200",
-    promoted: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200",
-    discarded: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-  };
-  const labels: Record<string, string> = {
-    pending_attachment: "cartola",
-  };
-  return (
-    <span
-      className={`rounded px-2 py-0.5 text-xs font-medium ${colors[status] ?? "bg-zinc-100"}`}
-    >
-      {labels[status] ?? status}
-    </span>
-  );
-}
+const STATUS_META: Record<
+  string,
+  { label: string; color: string; bg: string; Icon: typeof CheckCircleIcon }
+> = {
+  pending: { label: "pendiente", color: "var(--warn)", bg: "var(--warn-soft)", Icon: ClockIcon },
+  pending_attachment: {
+    label: "cartola",
+    color: "var(--info)",
+    bg: "var(--info-soft)",
+    Icon: FilePdfIcon,
+  },
+  error: {
+    label: "error",
+    color: "var(--neg)",
+    bg: "var(--neg-soft)",
+    Icon: WarningCircleIcon,
+  },
+  promoted: {
+    label: "listo",
+    color: "var(--pos)",
+    bg: "var(--pos-soft)",
+    Icon: CheckCircleIcon,
+  },
+  discarded: {
+    label: "descartado",
+    color: "var(--faint)",
+    bg: "var(--surface-2)",
+    Icon: TrashIcon,
+  },
+};
 
 type Movement = {
   id: string;
@@ -49,36 +68,39 @@ type Movement = {
 
 function MovementDetail({ m, hasRut }: { m: Movement; hasRut: boolean }) {
   if (m.status === "error" && m.error_detail) {
-    return <span className="text-red-600 dark:text-red-400">{m.error_detail}</span>;
+    return <span style={{ color: "var(--neg)" }}>{m.error_detail}</span>;
   }
   if (m.status === "pending_attachment" && m.attachment_path) {
     return hasRut ? (
-      <Link
-        href={`/cartolas/${m.id}`}
-        className="font-medium text-blue-600 hover:underline dark:text-blue-400"
-      >
+      <Link href={`/cartolas/${m.id}`} className="font-medium underline" style={{ color: "var(--info)" }}>
         Ver cartola
       </Link>
     ) : (
-      <Link
-        href="/settings"
-        className="font-medium text-amber-600 hover:underline dark:text-amber-400"
-      >
+      <Link href="/settings" className="font-medium underline" style={{ color: "var(--warn)" }}>
         Configurar RUT
       </Link>
     );
   }
   if (m.status === "pending_attachment") {
-    return (
-      <span className="text-amber-600 dark:text-amber-400">
-        {m.error_detail ?? "Sin adjunto"}
-      </span>
-    );
+    return <span style={{ color: "var(--warn)" }}>{m.error_detail ?? "Sin adjunto"}</span>;
   }
   return <>{m.raw_snippet?.slice(0, 80) ?? "—"}</>;
 }
 
-export default async function InboxPage() {
+const FILTERS = [
+  { value: "todos", label: (c: Record<string, number>) => `Todos · ${c.total ?? 0}` },
+  { value: "pending", label: (c: Record<string, number>) => `Pendientes · ${c.pending ?? 0}` },
+  { value: "pending_attachment", label: (c: Record<string, number>) => `Cartolas · ${c.pending_attachment ?? 0}` },
+  { value: "error", label: (c: Record<string, number>) => `Con error · ${c.error ?? 0}` },
+];
+
+export default async function InboxPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ filter?: string }>;
+}) {
+  const { filter } = await searchParams;
+  const activeFilter = filter ?? "todos";
   const { supabase, user } = await requireOnboarded();
 
   const { data: profile } = await supabase
@@ -93,122 +115,120 @@ export default async function InboxPage() {
     .from("email_movements")
     .select("*")
     .order("email_date", { ascending: false })
-    .limit(50);
+    .limit(80);
 
-  const pending = movements?.filter((m) => m.status === "pending").length ?? 0;
-  const cartolas =
-    movements?.filter((m) => m.status === "pending_attachment").length ?? 0;
-  const errors = movements?.filter((m) => m.status === "error").length ?? 0;
-  const promoted = movements?.filter((m) => m.status === "promoted").length ?? 0;
+  const counts: Record<string, number> = { total: movements?.length ?? 0 };
+  for (const m of movements ?? []) {
+    counts[m.status] = (counts[m.status] ?? 0) + 1;
+  }
+
+  const visible =
+    activeFilter === "todos"
+      ? (movements ?? [])
+      : (movements ?? []).filter((m) => m.status === activeFilter);
 
   return (
     <AppShell
       userEmail={user.email ?? ""}
-      title="Correos bancarios"
-      description={`Staging: ${pending} pendientes${cartolas > 0 ? `, ${cartolas} cartolas` : ""}, ${errors} errores${promoted > 0 ? `, ${promoted} promovidos` : ""}.`}
+      title="Correos"
+      description={`Staging: ${counts.pending ?? 0} pendientes, ${counts.error ?? 0} errores, ${counts.promoted ?? 0} promovidos.`}
     >
-      <SyncButton />
-
-      {cartolas > 0 && (
-        <p className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-100">
-          {hasRut ? (
-            <>
-              Las cartolas CuentaRUT están encriptadas; se abren con los últimos 4 dígitos
-              de tu RUT (guardado en{" "}
-              <Link href="/settings" className="font-medium underline">
-                Configuración
-              </Link>
-              ).
-            </>
-          ) : (
-            <>
-              Para abrir cartolas BancoEstado, configurá tu{" "}
-              <Link href="/settings" className="font-medium underline">
-                RUT en Configuración
-              </Link>{" "}
-              (contraseña del PDF = últimos 4 dígitos, sin dígito verificador).
-            </>
-          )}
-        </p>
-      )}
-
-      {(movements ?? []).length === 0 ? (
-        <div className="mt-6 rounded-xl border border-zinc-200 px-4 py-12 text-center text-zinc-500 dark:border-zinc-800">
-          Sin correos. Conectá IMAP y ejecutá sync desde el dashboard.
+      <div className="flex flex-col gap-4">
+        <div className="ng-card flex flex-wrap items-center gap-3.5 p-4">
+          <span
+            className="grid size-9 flex-none place-items-center rounded-[10px]"
+            style={{ background: "var(--pos-soft)", color: "var(--pos)" }}
+          >
+            <CheckCircleIcon size={18} />
+          </span>
+          <span className="min-w-[200px] flex-1">
+            <span className="block text-sm font-medium">{user.email}</span>
+            <span className="mt-0.5 block text-xs text-muted">
+              {counts.total} correos en staging
+            </span>
+          </span>
+          <SyncButton />
         </div>
-      ) : (
-        <>
-          <div className="mt-6 hidden overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 sm:block">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/80">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Estado</th>
-                  <th className="px-4 py-3 font-medium">Fecha</th>
-                  <th className="px-4 py-3 font-medium">Fuente</th>
-                  <th className="px-4 py-3 font-medium">Merchant</th>
-                  <th className="px-4 py-3 font-medium text-right">Monto</th>
-                  <th className="px-4 py-3 font-medium">Detalle</th>
-                </tr>
-              </thead>
-              <tbody>
-                {movements!.map((m) => (
-                  <tr
-                    key={m.id}
-                    className="border-b border-zinc-100 dark:border-zinc-800/80"
-                  >
-                    <td className="px-4 py-3">{statusBadge(m.status)}</td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      {m.email_date
-                        ? new Date(m.email_date).toLocaleDateString("es-CL")
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs">{m.source}</td>
-                    <td className="max-w-[12rem] truncate px-4 py-3">
-                      {m.merchant ?? m.counterparty ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {formatCLP(m.amount)}
-                    </td>
-                    <td className="max-w-xs truncate px-4 py-3 text-xs text-zinc-500">
-                      <MovementDetail m={m} hasRut={hasRut} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
 
-          <div className="mt-6 space-y-3 sm:hidden">
-            {movements!.map((m) => (
-              <div
-                key={m.id}
-                className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  {statusBadge(m.status)}
-                  <span className="text-xs text-zinc-500">
-                    {m.email_date
-                      ? new Date(m.email_date).toLocaleDateString("es-CL")
-                      : "—"}
-                  </span>
-                </div>
-                <p className="mt-2 truncate font-medium">
-                  {m.merchant ?? m.counterparty ?? "—"}
-                </p>
-                <div className="mt-1 flex items-center justify-between gap-2 text-xs text-zinc-500">
-                  <span className="font-mono">{m.source}</span>
-                  <span className="tabular-nums text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                    {formatCLP(m.amount)}
-                  </span>
-                </div>
-                <div className="mt-2 truncate text-xs text-zinc-500">
-                  <MovementDetail m={m} hasRut={hasRut} />
-                </div>
-              </div>
-            ))}
+        {(counts.pending_attachment ?? 0) > 0 && (
+          <p
+            className="m-0 flex flex-wrap items-center gap-2 rounded-[14px] p-4 text-sm"
+            style={{ background: "var(--info-soft)", color: "var(--text)" }}
+          >
+            {hasRut ? (
+              <>
+                Las cartolas CuentaRUT están encriptadas; se abren con los últimos 4 dígitos de tu
+                RUT (guardado en{" "}
+                <Link href="/settings" className="font-medium underline">
+                  Configuración
+                </Link>
+                ).
+              </>
+            ) : (
+              <>
+                Para abrir cartolas BancoEstado, configurá tu{" "}
+                <Link href="/settings" className="font-medium underline">
+                  RUT en Configuración
+                </Link>{" "}
+                (contraseña del PDF = últimos 4 dígitos, sin dígito verificador).
+              </>
+            )}
+          </p>
+        )}
+
+        <div className="flex gap-2 overflow-x-auto pb-0.5">
+          {FILTERS.map((f) => (
+            <Link
+              key={f.value}
+              href={f.value === "todos" ? "/inbox" : `/inbox?filter=${f.value}`}
+              className={`ng-pill ${activeFilter === f.value ? "ng-pill-on" : ""}`}
+            >
+              {f.label(counts)}
+            </Link>
+          ))}
+        </div>
+
+        {visible.length === 0 ? (
+          <div className="ng-card px-4 py-12 text-center text-sm text-muted">
+            Sin correos. Conectá IMAP y ejecutá sync desde el dashboard.
           </div>
-        </>
-      )}
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            {visible.map((m) => {
+              const meta = STATUS_META[m.status] ?? STATUS_META.discarded;
+              return (
+                <div key={m.id} className="ng-card flex items-center gap-3.5 p-3.5">
+                  <span
+                    className="grid size-9 flex-none place-items-center rounded-[10px]"
+                    style={{ background: meta.bg, color: meta.color }}
+                  >
+                    <meta.Icon size={16} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm">
+                      {m.merchant ?? m.counterparty ?? "—"}
+                    </span>
+                    <span className="block truncate text-xs text-faint">
+                      <MovementDetail m={m} hasRut={hasRut} />
+                    </span>
+                  </span>
+                  <span className="flex flex-none items-center gap-3">
+                    <span className="text-sm tabular-nums">
+                      <Amount>{formatCLP(m.amount)}</Amount>
+                    </span>
+                    <span
+                      className="ng-tag"
+                      style={{ background: meta.bg, color: meta.color }}
+                    >
+                      {meta.label}
+                    </span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </AppShell>
   );
 }
