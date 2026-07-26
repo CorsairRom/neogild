@@ -4,10 +4,12 @@
  *
  * Usage:
  *   python3 scripts/extract-cartolas.py
- *   npx tsx --env-file=.env --env-file=apps/web/.env.local scripts/load-cartolas.mjs
+ *   npx tsx --env-file=.env --env-file=apps/web/.env.local scripts/load-cartolas.mjs --reset
  *
- * Flags:
- *   --reset   wipe this user's transactions/statement_entries first
+ * Pairing rules (no phantom "Otras" legs):
+ *   1. BCH → Cmr / Tarjeta Cmr (or own-name amount = Falabella payment) → CMR
+ *   2. Own-name BCH ↔ BE same amount ±3 days → link transfer_to
+ *   3. Unmatched own-name → single-leg transfer + needs_review (no invented peer)
  */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -31,6 +33,7 @@ const RESET = process.argv.includes("--reset");
 const OWNER = "RICHARD ALEXIS ROMERO MOORE";
 const EXTRACTED = resolve("data/cartolas/_extracted.json");
 const FROM_DATE = "2026-01-01";
+const PAIR_WINDOW_DAYS = 3;
 
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -73,55 +76,70 @@ async function ensureUser() {
 }
 
 async function ensureAccounts(userId) {
+  // Archive the old phantom bucket if present — money must stay on real banks.
+  const { data: phantom } = await admin
+    .from("accounts")
+    .select("id")
+    .eq("user_id", userId)
+    .ilike("name", "%otras cuentas%")
+    .maybeSingle();
+  if (phantom?.id) {
+    await admin
+      .from("accounts")
+      .update({ is_archived: true, name: "Otras cuentas propias (archivada)" })
+      .eq("id", phantom.id);
+    console.log("archived phantom Otras cuentas propias");
+  }
+
   const specs = [
     {
       key: "bch",
       name: "Cuenta Corriente Banco de Chile",
       type: "asset",
       subtype: "debit",
-      metadata: { bank_account_numbers: ["1060707210", "001060707210"] },
+      metadata: {
+        bank: "banco_chile",
+        bank_account_numbers: ["1060707210", "001060707210"],
+      },
     },
     {
       key: "be",
       name: "CuentaRUT BancoEstado",
       type: "asset",
       subtype: "debit",
-      metadata: { bank_account_numbers: ["18202300"] },
+      metadata: {
+        bank: "banco_estado",
+        product: "cuentarut",
+        bank_account_numbers: ["18202300"],
+        // Débito asociada al producto CuentaRUT (≠ número de cuenta)
+        debit_card_last4: "1958",
+        instruments: [{ type: "debit_card", last4: "1958" }],
+      },
     },
     {
       key: "cmr",
       name: "CMR Falabella",
       type: "liability",
       subtype: "credit_card",
-      metadata: { card_last4: "5567", bank: "falabella" },
-    },
-    {
-      key: "other",
-      name: "Otras cuentas propias",
-      type: "asset",
-      subtype: "debit",
-      on_budget: false,
-      metadata: { inferred: true, note: "cuenta 10 / no rastreadas" },
+      metadata: {
+        bank: "falabella",
+        card_last4: "5567",
+        instruments: [{ type: "credit_card", last4: "5567" }],
+      },
     },
   ];
 
   const { data: existing } = await admin
     .from("accounts")
-    .select("id, name, metadata, subtype")
-    .eq("user_id", userId)
-    .eq("is_archived", false);
+    .select("id, name, metadata, subtype, is_archived")
+    .eq("user_id", userId);
 
   const map = {};
   for (const spec of specs) {
     let acc = (existing ?? []).find((a) =>
+      !a.is_archived &&
       a.name.toLowerCase().includes(
-        spec.key === "bch"
-          ? "chile"
-          : spec.key === "be"
-            ? "cuentarut"
-            : spec.key === "cmr"
-              ? "cmr"
-              : "otras cuentas",
+        spec.key === "bch" ? "chile" : spec.key === "be" ? "cuentarut" : "cmr",
       ),
     );
     if (!acc) {
@@ -133,7 +151,7 @@ async function ensureAccounts(userId) {
           type: spec.type,
           subtype: spec.subtype,
           entity: "personal",
-          on_budget: spec.on_budget ?? true,
+          on_budget: true,
           balance: 0,
           metadata: spec.metadata,
         })
@@ -145,7 +163,10 @@ async function ensureAccounts(userId) {
     } else {
       await admin
         .from("accounts")
-        .update({ metadata: { ...(acc.metadata ?? {}), ...spec.metadata } })
+        .update({
+          metadata: { ...(acc.metadata ?? {}), ...spec.metadata },
+          name: spec.name,
+        })
         .eq("id", acc.id);
     }
     map[spec.key] = acc.id;
@@ -205,10 +226,9 @@ function collectLines(extracted) {
     }
   }
 
-  // CMR purchases omitted for now: statements mix installments/prior periods and
-  // inflate liability vs cash reality. BCH→CMR pays still book as transfers.
-
-  return lines.sort((a, b) => a.date.localeCompare(b.date) || a.doc.localeCompare(b.doc));
+  return lines.sort(
+    (a, b) => a.date.localeCompare(b.date) || a.doc.localeCompare(b.doc),
+  );
 }
 
 function falabellaPaymentAmounts(extracted) {
@@ -220,6 +240,10 @@ function falabellaPaymentAmounts(extracted) {
   return set;
 }
 
+function isCmrDestination(description) {
+  return /cmr\b|tarjeta\s*cmr/i.test(description);
+}
+
 function classifyLine(line, falPayments) {
   const amount = line.deposit > 0 ? line.deposit : line.charge;
   const cls = classifyCartolaLine(
@@ -229,28 +253,11 @@ function classifyLine(line, falPayments) {
     OWNER,
   );
 
-  // CMR purchases
-  if (line.accountKey === "cmr") {
-    return {
-      type: "expense",
-      category: classifyCartolaLine(
-        line.description.replace(/^CMR\s+/i, "PAGO "),
-        0,
-        amount,
-        OWNER,
-      ).category,
-      kind: "pago",
-      counterparty: null,
-      needsReview: false,
-      peerKey: null,
-    };
-  }
-
-  // Banco Chile → CMR (full statement or "Cmr Mc Bd" partial pays)
+  // BCH → CMR credit card (label or own-name amount matching a Falabella pago)
   if (
     line.accountKey === "bch" &&
     line.charge > 0 &&
-    (/cmr\b/i.test(line.description) ||
+    (isCmrDestination(line.description) ||
       (cls.kind === "tef_own" && falPayments.has(amount)))
   ) {
     return {
@@ -264,22 +271,17 @@ function classifyLine(line, falPayments) {
   }
 
   if (cls.kind === "tef_own") {
-    return { ...cls, peerKey: null }; // resolved later by pairing
+    return { ...cls, peerKey: null };
   }
 
   return { ...cls, peerKey: null };
 }
 
-async function insertTx(userId, accountId, {
-  type,
-  amount,
-  description,
-  category,
-  date,
-  transferTo,
-  needsReview,
-  metadata,
-}) {
+async function insertTx(
+  userId,
+  accountId,
+  { type, amount, description, category, date, transferTo, needsReview, metadata },
+) {
   const { data, error } = await admin
     .from("transactions")
     .insert({
@@ -308,10 +310,12 @@ async function main() {
   const accounts = await ensureAccounts(userId);
   const falPayments = falabellaPaymentAmounts(extracted);
 
-  // Opening balances as of 2026-01-01
-  // BCH: saldo final 30/12/2025 = 580535 (from cartola Dec / Jan opening)
-  const bchOpenDoc = extracted.banco_chile.find((d) => d.file.includes("30012026"));
-  const beOpenDoc = extracted.banco_estado.find((d) => d.cartola_no === "000001");
+  const bchOpenDoc = extracted.banco_chile.find((d) =>
+    d.file.includes("30012026"),
+  );
+  const beOpenDoc = extracted.banco_estado.find(
+    (d) => d.cartola_no === "000001",
+  );
   if (RESET) {
     await setOpening(
       userId,
@@ -330,20 +334,19 @@ async function main() {
   }
 
   const lines = collectLines(extracted);
-  // Prefer BancoEstado op id; for BCH keep file+row doc. Collapse only exact fingerprints.
   const seenFp = new Set();
   console.log(`importing ${lines.length} lines from ${FROM_DATE}`);
 
-  /** @type {Array<{id:string, accountKey:string, date:string, amount:number, signed:number, kind:string, desc:string}>} */
+  /** @type {Array<{id:string, accountKey:string, date:string, amount:number, kind:string, desc:string}>} */
   const ownLegs = [];
   let imported = 0;
   let skipped = 0;
+  let cmrPays = 0;
 
   for (const line of lines) {
     const amount = line.deposit > 0 ? line.deposit : line.charge;
     if (amount <= 0) continue;
 
-    // Op ids reuse across months — fingerprint must include date+amount+description.
     const fp = `${line.source}:${line.file}:${line.doc}:${line.date}:${amount}:${line.description}`;
     if (seenFp.has(fp)) {
       skipped++;
@@ -365,27 +368,10 @@ async function main() {
     const cls = classifyLine(line, falPayments);
     const isDeposit = line.deposit > 0;
     const accountId = accounts[line.accountKey];
+    const type = cls.type;
+    const signedAmount =
+      type === "transfer" ? (isDeposit ? amount : -amount) : amount;
 
-    // Single-leg booking first (no synthetic peer yet for generic tef_own)
-    let type = cls.type;
-    let signedAmount = amount;
-    if (type === "transfer") {
-      signedAmount = isDeposit ? amount : -amount;
-    } else if (type === "expense") {
-      signedAmount = amount; // schema stores positive expense; balance delta separate
-    } else if (type === "income") {
-      signedAmount = amount;
-    }
-
-    // Credit card: expense increases liability → store as expense; balance rebuild uses -expense for assets but for liability?
-    // rebuild: expense → -amount. For liability credit cards, purchases should increase what you owe.
-    // Existing TC payments book transfer INTO credit card (positive). So CMR balance convention:
-    //   purchase: expense on CMR? or transfer? Looking at rebuild_account_balances:
-    //   expense → -amount (makes liability more negative = more debt if starting 0)
-    // Actually liability credit_card with expense -X goes more negative. Payment transfer +X reduces debt.
-    // BCH pay CMR: transfer - on BCH, + on CMR. Good.
-
-    let transferTo = cls.peerKey ? accounts[cls.peerKey] : null;
     const meta = {
       source: line.source,
       cartola_doc: line.doc,
@@ -396,16 +382,15 @@ async function main() {
     };
 
     if (cls.peerKey === "cmr" && type === "transfer") {
-      // Book both legs immediately for CMR payments
       const outId = await insertTx(userId, accounts.bch, {
         type: "transfer",
         amount: -amount,
-        description: `Pago CMR -> ${line.description}`,
+        description: line.description,
         category: null,
         date: line.date,
         transferTo: accounts.cmr,
         needsReview: false,
-        metadata: meta,
+        metadata: { ...meta, peer: "cmr" },
       });
       await insertTx(userId, accounts.cmr, {
         type: "transfer",
@@ -415,33 +400,30 @@ async function main() {
         date: line.date,
         transferTo: accounts.bch,
         needsReview: false,
-        metadata: { ...meta, pair_of: outId },
+        metadata: { ...meta, pair_of: outId, peer: "cmr" },
       });
       imported++;
+      cmrPays++;
       continue;
     }
 
-    const txAmount =
-      type === "transfer" ? signedAmount : amount;
-
     const id = await insertTx(userId, accountId, {
       type,
-      amount: txAmount,
+      amount: type === "transfer" ? signedAmount : amount,
       description: line.description,
       category: cls.category,
       date: line.date,
-      transferTo,
+      transferTo: null,
       needsReview: cls.needsReview ?? false,
       metadata: meta,
     });
 
-    if (cls.kind === "tef_own" && !cls.peerKey) {
+    if (cls.kind === "tef_own") {
       ownLegs.push({
         id,
         accountKey: line.accountKey,
         date: line.date,
         amount,
-        signed: signedAmount,
         kind: isDeposit ? "in" : "out",
         desc: line.description,
       });
@@ -449,7 +431,7 @@ async function main() {
     imported++;
   }
 
-  // Pair own-account transfers across BCH ↔ BE (same amount, ±1 day)
+  // Pair own-name transfers across BCH ↔ BE (±3 days for bank settlement lag)
   let paired = 0;
   const used = new Set();
   const outs = ownLegs.filter((l) => l.kind === "out");
@@ -457,131 +439,141 @@ async function main() {
 
   for (const out of outs) {
     if (used.has(out.id)) continue;
-    const match = ins.find(
-      (inn) =>
-        !used.has(inn.id) &&
-        inn.accountKey !== out.accountKey &&
-        inn.amount === out.amount &&
-        daysBetween(inn.date, out.date) <= 1,
-    );
-    if (match) {
-      await admin
-        .from("transactions")
-        .update({ transfer_to: accounts[match.accountKey] })
-        .eq("id", out.id);
-      await admin
-        .from("transactions")
-        .update({ transfer_to: accounts[out.accountKey] })
-        .eq("id", match.id);
-      used.add(out.id);
-      used.add(match.id);
-      paired++;
+    let best = null;
+    let bestDays = PAIR_WINDOW_DAYS + 1;
+    for (const inn of ins) {
+      if (used.has(inn.id)) continue;
+      if (inn.accountKey === out.accountKey) continue;
+      if (inn.amount !== out.amount) continue;
+      const days = daysBetween(inn.date, out.date);
+      if (days <= PAIR_WINDOW_DAYS && days < bestDays) {
+        best = inn;
+        bestDays = days;
+      }
     }
-  }
+    if (!best) continue;
 
-  // Unmatched own outs → Otras cuentas propias (synthetic in-leg).
-  // Never invent a synthetic out on BCH/BE for unmatched ins — those usually
-  // come from untracked own accounts ("cuenta 10"), not from the tracked peer.
-  let toOther = 0;
-  for (const out of outs) {
-    if (used.has(out.id)) continue;
+    const { data: outRow } = await admin
+      .from("transactions")
+      .select("metadata")
+      .eq("id", out.id)
+      .single();
+    const { data: inRow } = await admin
+      .from("transactions")
+      .select("metadata")
+      .eq("id", best.id)
+      .single();
     await admin
       .from("transactions")
-      .update({ transfer_to: accounts.other })
+      .update({
+        transfer_to: accounts[best.accountKey],
+        needs_review: false,
+        metadata: {
+          ...(outRow?.metadata ?? {}),
+          paired_own_transfer: true,
+          pair_lag_days: bestDays,
+          pair_of: best.id,
+        },
+      })
       .eq("id", out.id);
-    await insertTx(userId, accounts.other, {
-      type: "transfer",
-      amount: out.amount,
-      description: `${out.desc} (entrada)`,
-      category: null,
-      date: out.date,
-      transferTo: accounts[out.accountKey],
-      needsReview: true,
-      metadata: {
-        source: "inferred_own_account",
-        own_transfer_inferred: "untracked_peer",
-        pair_of: out.id,
-      },
-    });
-    used.add(out.id);
-    toOther++;
-  }
-
-  for (const inn of ins) {
-    if (used.has(inn.id)) continue;
     await admin
       .from("transactions")
-      .update({ transfer_to: accounts.other })
-      .eq("id", inn.id);
-    await insertTx(userId, accounts.other, {
-      type: "transfer",
-      amount: -inn.amount,
-      description: `${inn.desc} (salida)`,
-      category: null,
-      date: inn.date,
-      transferTo: accounts[inn.accountKey],
-      needsReview: true,
-      metadata: {
-        source: "inferred_own_account",
-        own_transfer_inferred: "untracked_peer",
-        pair_of: inn.id,
-      },
-    });
-    used.add(inn.id);
-    toOther++;
+      .update({
+        transfer_to: accounts[out.accountKey],
+        needs_review: false,
+        metadata: {
+          ...(inRow?.metadata ?? {}),
+          paired_own_transfer: true,
+          pair_lag_days: bestDays,
+          pair_of: out.id,
+        },
+      })
+      .eq("id", best.id);
+
+    used.add(out.id);
+    used.add(best.id);
+    paired++;
+  }
+
+  // Unmatched own-name: keep single leg, flag for review — do NOT invent peer account
+  let needsReviewOwn = 0;
+  for (const leg of ownLegs) {
+    if (used.has(leg.id)) continue;
+    const { data: row } = await admin
+      .from("transactions")
+      .select("metadata")
+      .eq("id", leg.id)
+      .single();
+    await admin
+      .from("transactions")
+      .update({
+        needs_review: true,
+        metadata: {
+          ...(row?.metadata ?? {}),
+          own_transfer_unpaired: true,
+          review_reason:
+            "Transferencia propia sin espejo en otra cartola (±3 días). Revisar destino/origen.",
+        },
+      })
+      .eq("id", leg.id);
+    needsReviewOwn++;
   }
 
   await admin.rpc("rebuild_account_balances", { p_user_id: userId });
 
   const { data: bals } = await admin
     .from("accounts")
-    .select("name, balance, subtype")
+    .select("name, balance, subtype, is_archived, metadata")
     .eq("user_id", userId)
     .eq("is_archived", false);
 
   const cash = (bals ?? [])
-    .filter((a) => a.subtype === "debit" && !/otras/i.test(a.name))
+    .filter((a) => a.subtype === "debit")
     .reduce((s, a) => s + Number(a.balance), 0);
 
-  // Expected closings from latest cartolas
-  const bchLatest = [...extracted.banco_chile].sort((a, b) =>
-    (a.file > b.file ? 1 : -1),
-  );
   const bchJun = extracted.banco_chile.find((d) => d.file.includes("30062026"));
   const beLatest = [...extracted.banco_estado]
     .filter((d) => d.cartola_no && d.cartola_no !== "000015")
     .sort((a, b) => a.cartola_no.localeCompare(b.cartola_no))
     .at(-1);
 
-  const bchBal = Number(bals?.find((a) => /chile/i.test(a.name))?.balance ?? 0);
-  const beBal = Number(bals?.find((a) => /cuentarut/i.test(a.name))?.balance ?? 0);
+  const bchBal = Number(
+    bals?.find((a) => /chile/i.test(a.name))?.balance ?? 0,
+  );
+  const beBal = Number(
+    bals?.find((a) => /cuentarut/i.test(a.name))?.balance ?? 0,
+  );
   const bchDrift = bchBal - (bchJun?.closing_balance ?? bchBal);
   const beDrift = beBal - (beLatest?.closing_balance ?? beBal);
+
+  const beMeta = bals?.find((a) => /cuentarut/i.test(a.name))?.metadata;
 
   console.log({
     imported,
     skipped,
     paired,
-    toOther,
-    balances: bals,
+    cmrPays,
+    needsReviewOwn,
+    balances: bals?.map((a) => ({
+      name: a.name,
+      balance: a.balance,
+      subtype: a.subtype,
+    })),
+    cuentarutInstruments: beMeta,
     trackedCash: cash,
     expectedBchClose: bchJun?.closing_balance,
     expectedBeClose: beLatest?.closing_balance,
     bchDrift,
     beDrift,
-    liquidaciones: extracted.liquidaciones.map((l) => ({
-      period: l.period,
-      net: l.net_pay,
-    })),
   });
 
   if (Math.abs(bchDrift) <= 2000 && Math.abs(beDrift) <= 2000) {
     console.log(
-      `✓ statement reconcile OK — BCH drift ${bchDrift}, BE drift ${beDrift} (≤2000)`,
+      `✓ statement reconcile OK — BCH drift ${bchDrift}, BE drift ${beDrift}`,
     );
   } else {
     console.warn(
-      `⚠ statement drift — BCH ${bchDrift} (want ~0 vs ${bchJun?.closing_balance}), BE ${beDrift} (want ~0 vs ${beLatest?.closing_balance})`,
+      `⚠ statement drift — BCH ${bchDrift}, BE ${beDrift}`,
     );
   }
 }

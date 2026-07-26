@@ -39,13 +39,29 @@ function subtypeLabel(subtype: string) {
   }
 }
 
-function accountHint(metadata: Record<string, unknown> | null) {
-  const last4 = (metadata as { card_last4?: string } | null)?.card_last4;
-  if (last4) return `····${last4}`;
-  const accountNumbers = (metadata as { bank_account_numbers?: string[] } | null)
-    ?.bank_account_numbers;
-  if (accountNumbers?.[0]) return `····${accountNumbers[0].slice(-4)}`;
-  return null;
+function accountHint(
+  subtype: string,
+  metadata: Record<string, unknown> | null,
+) {
+  const meta = metadata as {
+    card_last4?: string;
+    debit_card_last4?: string;
+    bank_account_numbers?: string[];
+  } | null;
+
+  const parts: string[] = [];
+  const accountNo = meta?.bank_account_numbers?.[0];
+  if (accountNo) parts.push(`Cuenta ····${accountNo.slice(-4)}`);
+
+  if (subtype === "credit_card" && meta?.card_last4) {
+    parts.push(`····${meta.card_last4}`);
+  } else if (meta?.debit_card_last4) {
+    parts.push(`Débito ····${meta.debit_card_last4}`);
+  } else if (meta?.card_last4 && !accountNo) {
+    parts.push(`····${meta.card_last4}`);
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function reconciliationStatus(balance: number, lastStatementBalance: number | null, lastStatementDate: string | null) {
@@ -80,7 +96,10 @@ export default async function AccountsPage({
     getAccountMonthActivity(supabase, month),
   ]);
 
-  const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
+  // Liquid cash only — credit cards are debt, not "plata disponible"
+  const totalBalance = accounts
+    .filter((a) => a.subtype === "debit" || a.subtype === "cash")
+    .reduce((sum, a) => sum + a.balance, 0);
 
   return (
     <AppShell userEmail={user.email ?? ""} title="Cuentas">
@@ -88,7 +107,7 @@ export default async function AccountsPage({
         <div className="ng-hero ng-rise flex flex-wrap items-end justify-between gap-4 p-5">
           <div>
             <p className="m-0 text-[11px] tracking-[0.1em] text-accent-strong uppercase">
-              Suma de tus cuentas
+              Efectivo en cuentas
             </p>
             <p className="mt-2 text-4xl leading-[1.05] font-semibold tracking-[-0.03em] tabular-nums">
               <Amount>{formatCLP(totalBalance, { signed: true })}</Amount>
@@ -104,7 +123,7 @@ export default async function AccountsPage({
           {accounts.map((account) => {
             const act = activity.find((a) => a.account_id === account.id);
             const Icon = ACCOUNT_ICONS[account.subtype] ?? BankIcon;
-            const hint = accountHint(account.metadata);
+            const hint = accountHint(account.subtype, account.metadata);
             const recon = reconciliationStatus(
               account.balance,
               account.last_statement_balance,

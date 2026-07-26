@@ -13,6 +13,7 @@ type Account = {
   metadata: {
     card_last4?: string;
     card_currency?: string;
+    debit_card_last4?: string;
     bank_account_numbers?: string[];
   } | null;
 };
@@ -55,6 +56,18 @@ export default async function AccountsSettingsPage() {
                 Saldo: {formatCLP(a.balance, { signed: true })}
               </p>
               <dl className="mt-2 space-y-1 text-sm">
+                {a.metadata?.bank_account_numbers?.map((n) => (
+                  <div key={n} className="flex gap-2">
+                    <dt className="text-muted">Cuenta</dt>
+                    <dd className="font-mono text-xs">{n}</dd>
+                  </div>
+                ))}
+                {a.metadata?.debit_card_last4 && (
+                  <div className="flex gap-2">
+                    <dt className="text-muted">Débito ****</dt>
+                    <dd>{a.metadata.debit_card_last4}</dd>
+                  </div>
+                )}
                 {a.metadata?.card_last4 && (
                   <div className="flex gap-2">
                     <dt className="text-muted">TC ****</dt>
@@ -63,12 +76,6 @@ export default async function AccountsSettingsPage() {
                     </dd>
                   </div>
                 )}
-                {a.metadata?.bank_account_numbers?.map((n) => (
-                  <div key={n} className="flex gap-2">
-                    <dt className="text-muted">Cuenta</dt>
-                    <dd className="font-mono text-xs">{n}</dd>
-                  </div>
-                ))}
               </dl>
             </li>
           ))}
