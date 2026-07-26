@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import {
   ArrowDownLeftIcon,
   ArrowsLeftRightIcon,
@@ -6,7 +5,6 @@ import {
 } from "@phosphor-icons/react/ssr";
 import { requireOnboarded } from "@/lib/auth/session";
 import { AppShell } from "@/components/app-shell";
-import { MonthNav } from "@/components/dashboard/month-nav";
 import { TransactionCategorySelect, TransactionTypeFilters } from "@/components/transaction-table";
 import { Amount } from "@/components/privacy-provider";
 import { categoryIcon } from "@/lib/category-icon";
@@ -93,15 +91,7 @@ export default async function TransactionsPage({
   const dayGroups = groupByDay(filtered ?? []);
 
   return (
-    <AppShell
-      userEmail={user.email ?? ""}
-      title="Movimientos"
-      actions={
-        <Suspense fallback={<span className="text-sm text-muted">…</span>}>
-          <MonthNav month={month} />
-        </Suspense>
-      }
-    >
+    <AppShell userEmail={user.email ?? ""} title="Movimientos">
       <div className="flex flex-col gap-4">
         <TransactionTypeFilters uncategorizedCount={uncategorizedCount} />
 

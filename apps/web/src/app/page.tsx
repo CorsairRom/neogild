@@ -1,8 +1,6 @@
-import { Suspense } from "react";
 import { requireOnboarded } from "@/lib/auth/session";
 import { getEmailConnectionStatus } from "@/lib/email/credentials";
 import { AppShell } from "@/components/app-shell";
-import { MonthNav } from "@/components/dashboard/month-nav";
 import {
   AccountsSummaryCard,
   CategoryBreakdown,
@@ -94,15 +92,7 @@ export default async function DashboardPage({
   const sparkline = trend.map((p) => p.ingresos - p.gastos);
 
   return (
-    <AppShell
-      userEmail={user.email ?? ""}
-      title="Resumen"
-      actions={
-        <Suspense fallback={<span className="text-sm text-muted">…</span>}>
-          <MonthNav month={month} />
-        </Suspense>
-      }
-    >
+    <AppShell userEmail={user.email ?? ""} title="Resumen">
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-5">
           <HeroBalanceCard
@@ -139,7 +129,7 @@ export default async function DashboardPage({
         </div>
 
         <div className="flex min-w-0 flex-col gap-5">
-          <AccountsSummaryCard accounts={accountsForSummary} />
+          <AccountsSummaryCard accounts={accountsForSummary} month={month} />
           <TrendChart points={trend} />
           <EmailStatusCard
             connected={connection.connected}

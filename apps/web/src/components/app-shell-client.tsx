@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import {
   BankIcon,
-  CaretLeftIcon,
-  CaretRightIcon,
   ChartDonutIcon,
   CircleHalfIcon,
   DiamondsFourIcon,
@@ -20,7 +18,17 @@ import {
   TagIcon,
   XIcon,
 } from "@phosphor-icons/react";
+import { MonthNav } from "@/components/dashboard/month-nav";
 import { useTheme } from "@/components/theme-provider";
+
+function withMonth(href: string, month: string | null) {
+  if (!month) return href;
+  const [path, qs] = href.split("?");
+  const params = new URLSearchParams(qs ?? "");
+  params.set("month", month);
+  const q = params.toString();
+  return q ? `${path}?${q}` : path;
+}
 
 type NavItem = {
   href: string;
@@ -77,6 +85,8 @@ function NavList({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const month = searchParams.get("month");
   return (
     <nav className="flex flex-1 flex-col gap-[3px]">
       {items.map((item) => {
@@ -85,7 +95,7 @@ function NavList({
         return (
           <Link
             key={item.href}
-            href={item.href}
+            href={withMonth(item.href, month)}
             title={item.label}
             onClick={onNavigate}
             className={`ng-nav-item ${active ? "ng-nav-item-active" : ""}`}
@@ -153,27 +163,29 @@ export function AppShellClient({
           className="sticky top-0 flex h-screen flex-none flex-col gap-6 bg-surface p-3 shadow-[1px_0_0_var(--line)]"
           style={{ width: expanded ? 244 : 68 }}
         >
-          <div className="flex min-h-8 items-center gap-2.5 px-1.5">
-            <span className="grid size-[30px] flex-none place-items-center rounded-lg bg-accent text-on-accent">
-              <DiamondsFourIcon size={16} weight="fill" />
-            </span>
-            {expanded && (
-              <span className="text-[13px] font-semibold tracking-[0.14em]">NEOGILD</span>
-            )}
-            <span className="flex-1" />
-            {expanded && (
-              <button
-                type="button"
-                onClick={toggleCollapsed}
-                title="Colapsar"
-                className="grid size-7 place-items-center rounded-md border-none bg-transparent text-faint hover:bg-surface-2 hover:text-text"
-              >
-                <CaretLeftIcon size={16} />
-              </button>
-            )}
+          <div className="flex min-h-8 items-center px-1.5">
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              aria-expanded={expanded}
+              aria-label={expanded ? "Ocultar menú" : "Mostrar menú"}
+              title={expanded ? "Ocultar menú" : "Mostrar menú"}
+              className="flex min-h-8 min-w-0 flex-1 items-center gap-2.5 rounded-lg border-none bg-transparent p-0 text-left text-text hover:bg-surface-2"
+            >
+              <span className="grid size-[30px] flex-none place-items-center rounded-lg bg-accent text-on-accent">
+                <DiamondsFourIcon size={16} weight="fill" />
+              </span>
+              {expanded && (
+                <span className="truncate text-[13px] font-semibold tracking-[0.14em]">
+                  NEOGILD
+                </span>
+              )}
+            </button>
           </div>
 
-          <NavList items={items} expanded={expanded} />
+          <Suspense fallback={null}>
+            <NavList items={items} expanded={expanded} />
+          </Suspense>
 
           <div className="flex flex-col gap-3">
             {expanded && <ThemeSegment />}
@@ -198,16 +210,6 @@ export function AppShellClient({
                 </form>
               )}
             </div>
-            {!expanded && (
-              <button
-                type="button"
-                onClick={toggleCollapsed}
-                title="Expandir"
-                className="grid h-8 w-full place-items-center rounded-lg border-none bg-transparent text-faint hover:bg-surface-2 hover:text-text"
-              >
-                <CaretRightIcon size={16} />
-              </button>
-            )}
           </div>
         </aside>
       )}
@@ -228,7 +230,16 @@ export function AppShellClient({
             {!mobile && (
               <h1 className="m-0 truncate text-[19px] font-medium tracking-tight">{title}</h1>
             )}
-            {actions && <div className="ml-auto flex items-center gap-1">{actions}</div>}
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+              <Suspense
+                fallback={
+                  <span className="h-9 w-[11rem] rounded-lg border border-line bg-transparent" />
+                }
+              >
+                <MonthNav />
+              </Suspense>
+              {actions}
+            </div>
           </div>
           {mobile && (
             <button
@@ -276,7 +287,9 @@ export function AppShellClient({
                 <XIcon size={19} />
               </button>
             </div>
-            <NavList items={items} expanded onNavigate={() => setDrawerOpen(false)} />
+            <Suspense fallback={null}>
+              <NavList items={items} expanded onNavigate={() => setDrawerOpen(false)} />
+            </Suspense>
             <div className="flex flex-col gap-3.5">
               <ThemeSegment compact />
               <div className="flex items-center gap-2.5">

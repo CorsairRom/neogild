@@ -169,14 +169,19 @@ const ACCOUNT_ICONS: Record<string, typeof BankIcon> = {
 
 export function AccountsSummaryCard({
   accounts,
+  month,
 }: {
   accounts: Array<{ id: string; name: string; kind: string; subtype: string; balance: number }>;
+  month: string;
 }) {
   return (
     <div className="ng-card ng-rise flex flex-col gap-4 p-5">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="m-0 text-base font-medium">Cuentas</h2>
-        <Link href="/accounts" className="ng-btn ng-btn-ghost !p-0 text-[13px]">
+        <Link
+          href={`/accounts?month=${month}`}
+          className="ng-btn ng-btn-ghost !p-0 text-[13px]"
+        >
           Ver todas
         </Link>
       </div>
@@ -185,7 +190,7 @@ export function AccountsSummaryCard({
         return (
           <Link
             key={acc.id}
-            href={`/accounts/${acc.id}`}
+            href={`/accounts/${acc.id}?month=${month}`}
             className="flex items-center gap-3 rounded-[11px] bg-surface-2 p-3 hover:bg-accent-soft"
           >
             <span className="grid size-[34px] flex-none place-items-center rounded-[9px] bg-accent-soft text-accent-strong">

@@ -1,20 +1,16 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CalendarBlankIcon, CaretLeftIcon, CaretRightIcon } from "@phosphor-icons/react";
-import { shiftMonth } from "@neogild/core";
+import { parseMonthParam, shiftMonth } from "@neogild/core";
 import { formatMonthTitle } from "@/lib/format";
 
-export function MonthNav({
-  month,
-  basePath = "/",
-}: {
-  month: string;
-  /** Path to navigate (keeps other search params). Default: dashboard `/`. */
-  basePath?: string;
-}) {
+/** Global month filter — stays on the current path and preserves other search params. */
+export function MonthNav() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+  const month = parseMonthParam(searchParams.get("month") ?? undefined);
   const prev = shiftMonth(month, -1);
   const next = shiftMonth(month, 1);
 
@@ -22,7 +18,7 @@ export function MonthNav({
     const params = new URLSearchParams(searchParams.toString());
     params.set("month", target);
     const q = params.toString();
-    router.push(q ? `${basePath}?${q}` : basePath);
+    router.push(q ? `${pathname}?${q}` : pathname);
   }
 
   return (

@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { requireOnboarded } from "@/lib/auth/session";
 import { AppShell } from "@/components/app-shell";
-import { formatCLP, typeLabel } from "@/lib/format";
+import { ListPagination } from "@/components/list-pagination";
+import { formatCLP, formatMonthTitle, typeLabel } from "@/lib/format";
+import { parsePageParam, parsePageSizeParam } from "@/lib/pagination";
 import { getAccountMonthActivity, parseMonthParam } from "@neogild/core";
 
 export const dynamic = "force-dynamic";
@@ -12,11 +15,13 @@ export default async function AccountDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; page?: string; pageSize?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
   const month = parseMonthParam(sp.month);
+  const pageSize = parsePageSizeParam(sp.pageSize);
+  let page = parsePageParam(sp.page);
   const { supabase, user } = await requireOnboarded();
 
   const { data: account } = await supabase
@@ -31,6 +36,19 @@ export default async function AccountDetailPage({
   const start = `${month}-01`;
   const end = new Date(y, m, 1).toISOString().slice(0, 10);
 
+  const { count: totalCount } = await supabase
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("account_id", id)
+    .gte("date", start)
+    .lt("date", end);
+
+  const total = totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1);
+  if (page > totalPages) page = totalPages;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
   const { data: transactions } = await supabase
     .from("transactions")
     .select("id, date, description, amount, type, category, transfer_to")
@@ -38,7 +56,7 @@ export default async function AccountDetailPage({
     .gte("date", start)
     .lt("date", end)
     .order("date", { ascending: false })
-    .limit(100);
+    .range(from, to);
 
   const activity = (await getAccountMonthActivity(supabase, month)).find(
     (a) => a.account_id === id,
@@ -51,13 +69,20 @@ export default async function AccountDetailPage({
     for (const p of peers ?? []) accountNames.set(p.id, p.name);
   }
 
+  const statementMonth = account.last_statement_date?.slice(0, 7) ?? null;
+  const showStatementJump =
+    total === 0 && statementMonth != null && statementMonth !== month;
+
   return (
     <AppShell
       userEmail={user.email ?? ""}
       title={account.name}
-      description={`Saldo actual · movimientos de ${month}`}
+      description="Saldo actual y movimientos del mes seleccionado"
       actions={
-        <Link href="/accounts" className="text-sm text-zinc-500 hover:underline">
+        <Link
+          href={`/accounts?month=${month}`}
+          className="text-sm text-zinc-500 hover:underline"
+        >
           ← Todas las cuentas
         </Link>
       }
@@ -72,7 +97,9 @@ export default async function AccountDetailPage({
       </div>
       <section className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-          <p className="text-xs text-zinc-500">Saldo</p>
+          <p className="text-xs text-zinc-500">
+            {account.subtype === "credit_card" ? "Por pagar" : "Saldo"}
+          </p>
           <p className="mt-1 text-2xl font-semibold tabular-nums">
             {formatCLP(account.balance, { signed: true })}
           </p>
@@ -125,9 +152,19 @@ export default async function AccountDetailPage({
         </p>
       ) : null}
 
-      {(transactions ?? []).length === 0 ? (
+      {total === 0 ? (
         <div className="mt-6 rounded-xl border border-zinc-200 px-4 py-12 text-center text-zinc-500 dark:border-zinc-800">
-          Sin movimientos este mes.
+          <p>Sin movimientos en {formatMonthTitle(month)}.</p>
+          {showStatementJump && (
+            <p className="mt-3">
+              <Link
+                href={`/accounts/${id}?month=${statementMonth}`}
+                className="text-sm font-medium text-[var(--accent-strong)] hover:underline"
+              >
+                Ver {formatMonthTitle(statementMonth!)} (última cartola)
+              </Link>
+            </p>
+          )}
         </div>
       ) : (
         <>
@@ -226,6 +263,10 @@ export default async function AccountDetailPage({
               );
             })}
           </div>
+
+          <Suspense fallback={null}>
+            <ListPagination page={page} pageSize={pageSize} total={total} />
+          </Suspense>
         </>
       )}
     </AppShell>
