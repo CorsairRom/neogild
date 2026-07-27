@@ -76,4 +76,16 @@ describe('parseFalabellaCmrText', () => {
     expect(payments[0].billed_amount).toBeLessThan(0)
     expect(s.parse_ok).toBe(true)
   })
+
+  it('junio 2026 pdf.js layout: montos en líneas separadas de las etiquetas', () => {
+    const s = parseFalabellaCmrText(load('2026-06-24.pdfjs.txt'))
+    expect(s.billing_date).toBe('2026-06-24')
+    expect(s.total_due).toBe(479140)
+    expect(s.minimum_due).toBe(85550)
+    expect(s.pay_until).toBe('2026-07-10')
+    expect(s.cupo_utilizado).toBe(1138565)
+    // Must not confuse date day "10" with minimum_due
+    expect(s.minimum_due).not.toBe(10)
+    expect(s.parse_ok).toBe(true)
+  })
 })

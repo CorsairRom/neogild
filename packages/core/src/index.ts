@@ -57,6 +57,7 @@ export {
   parseFalabellaCmrText,
   isFalabellaCmrStatementText,
   parseClpAmount,
+  extractCmrPaymentSummary,
   FALABELLA_CMR_CLOSE_TOLERANCE,
 } from './parsers/falabella-cmr'
 export type {
@@ -66,6 +67,31 @@ export type {
   FalabellaCmrSection,
   FalabellaCmrPreviousPeriod,
 } from './parsers/falabella-cmr'
+export {
+  creditCardStatementFromMetadata,
+  mergeCreditCardStatementMetadata,
+  creditCardBalanceFromTotalDue,
+} from './credit-card-statement'
+export type { CreditCardStatementSummary } from './credit-card-statement'
+export {
+  CYCLE_AMOUNT_TOLERANCE,
+  CYCLE_DATE_WINDOW_DAYS,
+  cycleNetChange,
+  cyclePending,
+  pickCycleForPayment,
+  statusAfterPayment,
+  listCreditCardCycles,
+  getCreditCardCycleForMonth,
+  getCreditCardCyclesByAccounts,
+  upsertCycleFromStatement,
+  matchCyclePayment,
+} from './credit-card-cycles'
+export type {
+  CreditCardCycleRow,
+  CreditCardCycleStatus,
+  UpsertCycleInput,
+  MatchCyclePaymentInput,
+} from './credit-card-cycles'
 export type { GmailSyncSummary } from './sync'
 export {
   getCategoryBreakdown,

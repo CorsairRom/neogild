@@ -15,10 +15,14 @@ import { formatCLP, formatMonthTitle } from "@/lib/format";
 import {
   cashAccountsActualBalance,
   cashAccountsMonthNet,
+  cycleNetChange,
+  cyclePending,
   getAccountMonthActivity,
+  getCreditCardCyclesByAccounts,
   getPersonalAccountBalances,
   monthNetFromActivity,
   parseMonthParam,
+  type CreditCardCycleRow,
 } from "@neogild/core";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +43,19 @@ function subtypeLabel(subtype: string) {
       return "Efectivo";
     default:
       return subtype;
+  }
+}
+
+function cycleStatusLabel(cycle: CreditCardCycleRow): string {
+  switch (cycle.status) {
+    case "paid":
+      return "Ciclo al día";
+    case "partial":
+      return "Pago parcial";
+    case "overdue":
+      return "Vencido";
+    default:
+      return cycle.paid_amount > 0 ? "Pago parcial" : "Pendiente de pago";
   }
 }
 
@@ -107,6 +124,15 @@ export default async function AccountsPage({
     getAccountMonthActivity(supabase, month),
   ]);
 
+  const creditIds = accounts
+    .filter((a) => a.subtype === "credit_card")
+    .map((a) => a.id);
+  const cyclesByAccount = await getCreditCardCyclesByAccounts(
+    supabase,
+    creditIds,
+    month,
+  );
+
   const monthNets = accounts.map((account) => ({
     accountId: account.id,
     ...monthNetFromActivity(activity.find((a) => a.account_id === account.id)),
@@ -156,21 +182,19 @@ export default async function AccountsPage({
             const net = monthNets.find((n) => n.accountId === account.id);
             const monthIn = net?.monthIn ?? 0;
             const monthOut = net?.monthOut ?? 0;
-            const monthNet = net?.monthNet ?? 0;
             const Icon = ACCOUNT_ICONS[account.subtype] ?? BankIcon;
             const hint = accountHint(account.subtype, account.metadata);
             const isCredit = account.subtype === "credit_card";
+            const cycle = isCredit ? cyclesByAccount.get(account.id) : null;
+            const monthNet = isCredit
+              ? cycleNetChange(cycle?.previous_paid, cycle?.total_due)
+              : (net?.monthNet ?? 0);
             const recon = reconciliationStatus(
               account.balance,
               account.last_statement_balance,
               account.last_statement_date,
             );
-            const meta = account.metadata as {
-              total_due?: number;
-              cupo_utilizado?: number;
-              cupo_total?: number;
-              balance_source?: string;
-            } | null;
+            const pending = cycle ? cyclePending(cycle) : null;
 
             return (
               <Link
@@ -195,7 +219,7 @@ export default async function AccountsPage({
 
                 <div>
                   <p className="m-0 mb-1 text-[11px] tracking-[0.08em] text-faint uppercase">
-                    Neto del mes
+                    {isCredit ? "Neto del ciclo" : "Neto del mes"}
                   </p>
                   <p
                     className="m-0 text-[28px] font-semibold tracking-[-0.02em] tabular-nums"
@@ -209,52 +233,119 @@ export default async function AccountsPage({
                   >
                     <Amount>{formatCLP(monthNet, { signed: true })}</Amount>
                   </p>
-                  <p className="mt-1 m-0 text-xs text-muted">
-                    {isCredit ? "Por pagar " : "Saldo actual "}
-                    <span className="tabular-nums text-text">
-                      <Amount>
-                        {formatCLP(
-                          isCredit ? Math.abs(account.balance) : account.balance,
-                          { signed: !isCredit },
-                        )}
-                      </Amount>
-                    </span>
-                  </p>
-                  {isCredit && meta?.cupo_utilizado != null && meta?.cupo_total != null && (
-                    <p className="mt-1 m-0 text-xs text-faint">
-                      Utilizado {formatCLP(meta.cupo_utilizado)} / cupo{" "}
-                      {formatCLP(meta.cupo_total)}
+                  {isCredit && cycle ? (
+                    <>
+                      <p className="mt-1 m-0 text-xs text-muted">
+                        Facturado{" "}
+                        <span className="tabular-nums text-text">
+                          <Amount>{formatCLP(cycle.total_due)}</Amount>
+                        </span>
+                        {pending != null && pending > 0
+                          ? ` · pendiente ${formatCLP(pending)}`
+                          : ""}
+                      </p>
+                      {cycle.minimum_due != null && (
+                        <p className="mt-1 m-0 text-xs text-faint">
+                          Mínimo{" "}
+                          <span className="tabular-nums">
+                            <Amount>{formatCLP(cycle.minimum_due)}</Amount>
+                          </span>
+                          {cycle.pay_until ? ` · hasta ${cycle.pay_until}` : ""}
+                        </p>
+                      )}
+                      {cycle.cupo_utilizado != null && cycle.cupo_total != null && (
+                        <p className="mt-1 m-0 text-xs text-faint">
+                          Utilizado {formatCLP(cycle.cupo_utilizado)} / cupo{" "}
+                          {formatCLP(cycle.cupo_total)}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="mt-1 m-0 text-xs text-muted">
+                      Saldo actual{" "}
+                      <span className="tabular-nums text-text">
+                        <Amount>
+                          {formatCLP(account.balance, { signed: true })}
+                        </Amount>
+                      </span>
                     </p>
                   )}
                 </div>
 
                 <div className="flex gap-5">
-                  <span className="flex flex-col gap-0.5">
-                    <span className="text-[11px] text-faint">Entró</span>
-                    <span
-                      className="text-[13px] tabular-nums"
-                      style={{ color: "var(--pos)" }}
-                    >
-                      <Amount>{formatCLP(monthIn)}</Amount>
-                    </span>
-                  </span>
-                  <span className="flex flex-col gap-0.5">
-                    <span className="text-[11px] text-faint">Salió</span>
-                    <span
-                      className="text-[13px] tabular-nums"
-                      style={{ color: "var(--neg)" }}
-                    >
-                      <Amount>{formatCLP(monthOut)}</Amount>
-                    </span>
-                  </span>
+                  {isCredit && cycle ? (
+                    <>
+                      <span className="flex flex-col gap-0.5">
+                        <span className="text-[11px] text-faint">Pagado ant.</span>
+                        <span
+                          className="text-[13px] tabular-nums"
+                          style={{ color: "var(--pos)" }}
+                        >
+                          <Amount>{formatCLP(cycle.previous_paid ?? 0)}</Amount>
+                        </span>
+                      </span>
+                      <span className="flex flex-col gap-0.5">
+                        <span className="text-[11px] text-faint">Facturado</span>
+                        <span
+                          className="text-[13px] tabular-nums"
+                          style={{ color: "var(--neg)" }}
+                        >
+                          <Amount>{formatCLP(cycle.total_due)}</Amount>
+                        </span>
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex flex-col gap-0.5">
+                        <span className="text-[11px] text-faint">Entró</span>
+                        <span
+                          className="text-[13px] tabular-nums"
+                          style={{ color: "var(--pos)" }}
+                        >
+                          <Amount>{formatCLP(monthIn)}</Amount>
+                        </span>
+                      </span>
+                      <span className="flex flex-col gap-0.5">
+                        <span className="text-[11px] text-faint">Salió</span>
+                        <span
+                          className="text-[13px] tabular-nums"
+                          style={{ color: "var(--neg)" }}
+                        >
+                          <Amount>{formatCLP(monthOut)}</Amount>
+                        </span>
+                      </span>
+                    </>
+                  )}
                 </div>
 
                 <div
                   className="flex items-center gap-2 rounded-[9px] bg-surface-2 px-3 py-2.5 text-xs"
-                  style={{ color: recon.color }}
+                  style={{
+                    color: isCredit
+                      ? cycle?.status === "paid"
+                        ? "var(--pos)"
+                        : "var(--warn, #d4a017)"
+                      : recon.color,
+                  }}
                 >
-                  <recon.Icon size={15} />
-                  {recon.label}
+                  {isCredit ? (
+                    <>
+                      {cycle?.status === "paid" ? (
+                        <CheckCircleIcon size={15} />
+                      ) : (
+                        <ClockIcon size={15} />
+                      )}
+                      {cycle ? cycleStatusLabel(cycle) : "Sin ciclo"}
+                      {cycle?.billing_date
+                        ? ` · cartola ${cycle.billing_date}`
+                        : ""}
+                    </>
+                  ) : (
+                    <>
+                      <recon.Icon size={15} />
+                      {recon.label}
+                    </>
+                  )}
                 </div>
               </Link>
             );
@@ -262,8 +353,8 @@ export default async function AccountsPage({
         </div>
 
         <p className="m-0 max-w-[680px] text-[13px] leading-[1.6] text-muted">
-          El número grande es el neto del mes (entró − salió, con transferencias).
-          Debajo queda el saldo actual de la cuenta (o por pagar de la TC).
+          En cuentas de efectivo el número grande es entró − salió. En TC es el
+          neto del ciclo (pagado del período anterior − facturado actual).
         </p>
       </div>
     </AppShell>

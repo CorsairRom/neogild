@@ -201,6 +201,10 @@ export function AccountsSummaryCard({
     subtype: string;
     monthNet: number;
     actualBalance: number;
+    totalDue?: number | null;
+    minimumDue?: number | null;
+    cycleStatus?: string | null;
+    previousPaid?: number | null;
   }>;
   month: string;
 }) {
@@ -218,6 +222,8 @@ export function AccountsSummaryCard({
       {accounts.map((acc) => {
         const Icon = ACCOUNT_ICONS[acc.subtype] ?? BankIcon;
         const isCredit = acc.subtype === "credit_card";
+        const debt =
+          acc.totalDue != null ? acc.totalDue : Math.abs(acc.actualBalance);
         return (
           <Link
             key={acc.id}
@@ -232,13 +238,17 @@ export function AccountsSummaryCard({
               <span className="block text-xs text-faint">
                 {acc.kind}
                 {" · "}
-                {isCredit ? "por pagar " : "saldo "}
+                {isCredit ? "facturado " : "saldo "}
                 <Amount>
-                  {formatCLP(
-                    isCredit ? Math.abs(acc.actualBalance) : acc.actualBalance,
-                    { signed: !isCredit },
-                  )}
+                  {formatCLP(isCredit ? debt : acc.actualBalance, {
+                    signed: !isCredit,
+                  })}
                 </Amount>
+                {isCredit && acc.cycleStatus === "paid"
+                  ? " · al día"
+                  : isCredit && acc.minimumDue != null
+                    ? ` · mín ${formatCLP(acc.minimumDue)}`
+                    : ""}
               </span>
             </span>
             <span

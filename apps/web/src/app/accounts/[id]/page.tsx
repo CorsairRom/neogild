@@ -7,7 +7,10 @@ import { ListPagination } from "@/components/list-pagination";
 import { formatCLP, formatMonthTitle, typeLabel } from "@/lib/format";
 import { parsePageParam, parsePageSizeParam } from "@/lib/pagination";
 import {
+  cycleNetChange,
+  cyclePending,
   getAccountMonthActivity,
+  getCreditCardCycleForMonth,
   monthNetFromActivity,
   parseMonthParam,
 } from "@neogild/core";
@@ -30,7 +33,9 @@ export default async function AccountDetailPage({
 
   const { data: account } = await supabase
     .from("accounts")
-    .select("id, name, subtype, balance, currency, last_statement_balance, last_statement_date")
+    .select(
+      "id, name, subtype, balance, currency, metadata, last_statement_balance, last_statement_date",
+    )
     .eq("id", id)
     .single();
 
@@ -77,14 +82,25 @@ export default async function AccountDetailPage({
   const showStatementJump =
     total === 0 && statementMonth != null && statementMonth !== month;
 
-  const { monthIn, monthOut, monthNet } = monthNetFromActivity(activity);
+  const { monthIn, monthOut, monthNet: cashNet } = monthNetFromActivity(activity);
   const isCredit = account.subtype === "credit_card";
+  const cycle = isCredit
+    ? await getCreditCardCycleForMonth(supabase, id, month)
+    : null;
+  const monthNet = isCredit
+    ? cycleNetChange(cycle?.previous_paid, cycle?.total_due)
+    : cashNet;
+  const pending = cycle ? cyclePending(cycle) : null;
 
   return (
     <AppShell
       userEmail={user.email ?? ""}
       title={account.name}
-      description={`Neto y movimientos de ${formatMonthTitle(month)}`}
+      description={
+        isCredit
+          ? `Ciclo y movimientos de ${formatMonthTitle(month)}`
+          : `Neto y movimientos de ${formatMonthTitle(month)}`
+      }
       actions={
         <Link
           href={`/accounts?month=${month}`}
@@ -104,7 +120,9 @@ export default async function AccountDetailPage({
       </div>
       <section className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-          <p className="text-xs text-zinc-500">Neto del mes</p>
+          <p className="text-xs text-zinc-500">
+            {isCredit ? "Neto del ciclo" : "Neto del mes"}
+          </p>
           <p
             className="mt-1 text-2xl font-semibold tabular-nums"
             style={
@@ -117,26 +135,49 @@ export default async function AccountDetailPage({
           >
             {formatCLP(monthNet, { signed: true })}
           </p>
-          <p className="mt-1 text-xs text-muted">
-            {isCredit ? "Por pagar " : "Saldo actual "}
-            <span className="tabular-nums text-text">
-              {formatCLP(
-                isCredit ? Math.abs(account.balance) : account.balance,
-                { signed: !isCredit },
+          {isCredit && cycle ? (
+            <>
+              <p className="mt-1 text-xs text-muted">
+                Facturado{" "}
+                <span className="tabular-nums text-text">
+                  {formatCLP(cycle.total_due)}
+                </span>
+                {pending != null && pending > 0
+                  ? ` · pendiente ${formatCLP(pending)}`
+                  : cycle.status === "paid"
+                    ? " · pagado"
+                    : ""}
+              </p>
+              {cycle.minimum_due != null && (
+                <p className="mt-1 text-xs text-zinc-500">
+                  Mínimo {formatCLP(cycle.minimum_due)}
+                  {cycle.pay_until ? ` · hasta ${cycle.pay_until}` : ""}
+                </p>
               )}
-            </span>
-          </p>
+            </>
+          ) : (
+            <p className="mt-1 text-xs text-muted">
+              Saldo actual{" "}
+              <span className="tabular-nums text-text">
+                {formatCLP(account.balance, { signed: true })}
+              </span>
+            </p>
+          )}
         </div>
         <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-          <p className="text-xs text-zinc-500">Entró</p>
+          <p className="text-xs text-zinc-500">
+            {isCredit ? "Pagado anterior" : "Entró"}
+          </p>
           <p className="mt-1 text-lg font-semibold tabular-nums text-emerald-600">
-            {formatCLP(monthIn)}
+            {formatCLP(isCredit ? (cycle?.previous_paid ?? 0) : monthIn)}
           </p>
         </div>
         <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-          <p className="text-xs text-zinc-500">Salió</p>
+          <p className="text-xs text-zinc-500">
+            {isCredit ? "Facturado" : "Salió"}
+          </p>
           <p className="mt-1 text-lg font-semibold tabular-nums text-rose-600">
-            {formatCLP(monthOut)}
+            {formatCLP(isCredit ? (cycle?.total_due ?? 0) : monthOut)}
           </p>
         </div>
       </section>

@@ -96,6 +96,57 @@ function match1(text: string, re: RegExp): string | null {
   return m?.[1]?.trim() ?? null
 }
 
+/**
+ * RESUMEN DE PAGO amounts.
+ * pdftotext -layout keeps label+amount on one line; pdf.js often emits labels
+ * first and then the date/amounts on following lines — never take bare digits
+ * from a date (e.g. "10/07/2026" must not become minimum_due=10).
+ */
+export function extractCmrPaymentSummary(text: string): {
+  pay_until: string | null
+  total_due: number | null
+  minimum_due: number | null
+} {
+  const payUntilSame =
+    match1(text, /RESUMEN\s*•\s*Pagar Hasta\s+(\d{2}\/\d{2}\/\d{4})/i) ??
+    match1(text, /Pagar Hasta\s+(\d{2}\/\d{2}\/\d{4})/i)
+
+  const totalSame = match1(text, /Monto Total Facturado a Pagar\s+\$?([\d.]{3,})/i)
+  // Require $ or a thousands-separated amount so "10/07/2026" cannot match.
+  const minSame =
+    match1(text, /Monto m[ií]nimo a pagar\s+\$([\d.]+)/i) ??
+    match1(text, /Monto m[ií]nimo a pagar\s+([\d]{1,3}(?:\.\d{3})+)/i)
+
+  let pay_until = payUntilSame ? clDateToIso(payUntilSame) : null
+  let total_due = totalSame != null ? parseClpAmount(totalSame) : null
+  let minimum_due = minSame != null ? parseClpAmount(minSame) : null
+
+  if (total_due != null && minimum_due != null && pay_until != null) {
+    return { pay_until, total_due, minimum_due }
+  }
+
+  // Split layout (pdf.js): labels then values in order.
+  const anchor = text.search(/Monto Total Facturado a Pagar/i)
+  if (anchor >= 0) {
+    const chunk = text.slice(anchor, anchor + 500)
+    const dollars = [...chunk.matchAll(/\$\s*([\d.]{3,})/g)].map((m) => parseClpAmount(m[1]))
+    if (total_due == null && dollars[0] != null) total_due = dollars[0]
+    if (minimum_due == null && dollars[1] != null) minimum_due = dollars[1]
+
+    if (pay_until == null) {
+      const dateInChunk = chunk.match(/(\d{2}\/\d{2}\/\d{4})/)
+      if (dateInChunk) pay_until = clDateToIso(dateInChunk[1])
+    }
+  }
+
+  if (pay_until == null) {
+    const pagar = match1(text, /Pagar Hasta\s+(\d{2}\/\d{2}\/\d{4})/i)
+    if (pagar) pay_until = clDateToIso(pagar)
+  }
+
+  return { pay_until, total_due, minimum_due }
+}
+
 function detectPurchaseSection(header: string): FalabellaCmrSection | null {
   // Data rows contain transaction dates — never treat as section headers
   // (e.g. merchant "Compra en cuotas sodimac…" must not match SODIMAC section).
@@ -193,15 +244,7 @@ export function parseFalabellaCmrText(text: string): FalabellaCmrStatement {
   const period_from = periodMatch ? clDateToIso(periodMatch[1]) : null
   const period_to = periodMatch ? clDateToIso(periodMatch[2]) : null
 
-  const payUntilRaw =
-    match1(text, /RESUMEN\s*•\s*Pagar Hasta\s+(\d{2}\/\d{2}\/\d{4})/i) ??
-    match1(text, /Pagar Hasta\s+(\d{2}\/\d{2}\/\d{4})/i)
-  const pay_until = payUntilRaw ? clDateToIso(payUntilRaw) : null
-
-  const totalRaw = match1(text, /Monto Total Facturado a Pagar\s+\$?([\d.]+)/i)
-  const total_due = totalRaw != null ? parseClpAmount(totalRaw) : null
-  const minRaw = match1(text, /Monto m[ií]nimo a pagar\s+\$?([\d.]+)/i)
-  const minimum_due = minRaw != null ? parseClpAmount(minRaw) : null
+  const { pay_until, total_due, minimum_due } = extractCmrPaymentSummary(text)
 
   const cupoMatch = text.match(/Cupo Total\*\s+([\d.]+|-)\s+([\d.]+|-)\s+([\d.]+|-)/i)
   const cupo_total = cupoMatch ? parseClpAmount(cupoMatch[1]) : null

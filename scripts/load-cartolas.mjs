@@ -17,7 +17,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
-import { classifyCartolaLine } from "@neogild/core";
+import {
+  classifyCartolaLine,
+  creditCardBalanceFromTotalDue,
+  matchCyclePayment,
+  mergeCreditCardStatementMetadata,
+  upsertCycleFromStatement,
+} from "@neogild/core";
 
 const DB_URL =
   process.env.DATABASE_URL ||
@@ -179,6 +185,7 @@ async function ensureAccounts(userId) {
 async function resetUser(userId) {
   await admin.from("email_movements").delete().eq("user_id", userId);
   await admin.from("statement_entries").delete().eq("user_id", userId);
+  await admin.from("credit_card_cycles").delete().eq("user_id", userId);
   await admin.from("transactions").delete().eq("user_id", userId);
   await admin.from("accounts").update({ balance: 0 }).eq("user_id", userId);
   console.log("reset transactions for user");
@@ -319,6 +326,38 @@ async function main() {
   const userId = await ensureUser();
   if (RESET) await resetUser(userId);
   const accounts = await ensureAccounts(userId);
+
+  // Billing cycles first so bank payment matches can settle them.
+  const falSorted = [...(extracted.banco_falabella ?? [])]
+    .filter((d) => d.billing_date && d.total_due != null)
+    .sort((a, b) => a.billing_date.localeCompare(b.billing_date));
+  for (const doc of falSorted) {
+    await upsertCycleFromStatement(admin, {
+      userId,
+      accountId: accounts.cmr,
+      statement: {
+        billing_date: doc.billing_date,
+        period_from: doc.period_from ?? null,
+        period_to: doc.period_to ?? null,
+        pay_until: doc.pay_until ?? null,
+        total_due: doc.total_due,
+        minimum_due: doc.minimum_due ?? null,
+        cupo_total: doc.cupo_total ?? null,
+        cupo_utilizado: doc.cupo_utilizado ?? null,
+        cupo_disponible: doc.cupo_disponible ?? null,
+        previous_period: doc.previous_period ?? {
+          from: null,
+          to: null,
+          opening_balance: null,
+          billed: null,
+          paid: null,
+          closing_balance: null,
+        },
+      },
+      sourceFile: doc.file,
+    });
+  }
+
   const officialPays = falabellaOfficialPayments(extracted).map((p) => ({
     ...p,
     used: false,
@@ -427,7 +466,7 @@ async function main() {
             falabella_billing_date: pay.billing_date,
           },
         });
-        await insertTx(userId, accounts.cmr, {
+        const cmrPayId = await insertTx(userId, accounts.cmr, {
           type: "transfer",
           amount: amount,
           description: `Pago tarjeta CMR <- ${bankLabel}`,
@@ -444,6 +483,15 @@ async function main() {
             peer: line.accountKey,
             import_fp: `falabella:${pay.file}:payment:${pay.date}:${pay.amount}`,
           },
+        });
+        // Trigger also matches; explicit call attaches bank_transaction_id.
+        await matchCyclePayment(admin, {
+          userId,
+          amount,
+          date: line.date,
+          accountId: accounts.cmr,
+          bankTransactionId: outId,
+          cmrPaymentTransactionId: cmrPayId,
         });
         imported++;
         cmrPays++;
@@ -695,39 +743,72 @@ async function main() {
       .eq("id", accounts.be);
   }
 
-  // CMR: balance = -total_due from latest estado (deuda facturada), not sum of pays.
-  // Payments stay on the ledger for BCH traceability; CMR display is statement-sourced.
-  const falLatest = [...extracted.banco_falabella]
-    .filter((d) => d.billing_date && d.total_due != null)
-    .sort((a, b) => a.billing_date.localeCompare(b.billing_date))
-    .at(-1);
+  // CMR: balance = -total_due from latest estado; refresh metadata cache + cycles.
+  const falLatest = falSorted.at(-1);
 
   if (falLatest) {
-    const debt = -Math.abs(falLatest.total_due);
     const { data: cmrRow } = await admin
       .from("accounts")
       .select("metadata")
       .eq("id", accounts.cmr)
       .single();
+
+    let meta = { ...(cmrRow?.metadata ?? {}) };
+    for (const doc of falSorted) {
+      meta = mergeCreditCardStatementMetadata(meta, {
+        billing_date: doc.billing_date,
+        total_due: doc.total_due,
+        minimum_due: doc.minimum_due ?? null,
+        pay_until: doc.pay_until ?? null,
+        cupo_total: doc.cupo_total ?? null,
+        cupo_utilizado: doc.cupo_utilizado ?? null,
+        cupo_disponible: doc.cupo_disponible ?? null,
+        file: doc.file ?? null,
+      });
+      // Re-apply previous_period settlement after all txs exist.
+      await upsertCycleFromStatement(admin, {
+        userId,
+        accountId: accounts.cmr,
+        statement: {
+          billing_date: doc.billing_date,
+          period_from: doc.period_from ?? null,
+          period_to: doc.period_to ?? null,
+          pay_until: doc.pay_until ?? null,
+          total_due: doc.total_due,
+          minimum_due: doc.minimum_due ?? null,
+          cupo_total: doc.cupo_total ?? null,
+          cupo_utilizado: doc.cupo_utilizado ?? null,
+          cupo_disponible: doc.cupo_disponible ?? null,
+          previous_period: doc.previous_period ?? {
+            from: null,
+            to: null,
+            opening_balance: null,
+            billed: null,
+            paid: null,
+            closing_balance: null,
+          },
+        },
+        sourceFile: doc.file,
+      });
+    }
+
+    const debt = creditCardBalanceFromTotalDue(falLatest.total_due);
     await admin
       .from("accounts")
       .update({
         balance: debt,
         last_statement_balance: debt,
         last_statement_date: falLatest.billing_date,
-        metadata: {
-          ...(cmrRow?.metadata ?? {}),
-          balance_source: "statement_total_due",
-          total_due: falLatest.total_due,
-          minimum_due: falLatest.minimum_due,
-          cupo_total: falLatest.cupo_total,
-          cupo_utilizado: falLatest.cupo_utilizado,
-          cupo_disponible: falLatest.cupo_disponible,
-          statement_file: falLatest.file,
-        },
+        metadata: meta,
       })
       .eq("id", accounts.cmr);
   }
+
+  const { data: cycleRows } = await admin
+    .from("credit_card_cycles")
+    .select("billing_date, total_due, previous_paid, paid_amount, status")
+    .eq("account_id", accounts.cmr)
+    .order("billing_date");
 
   const { data: bals } = await admin
     .from("accounts")
@@ -773,9 +854,13 @@ async function main() {
       ? {
           billing_date: falLatest.billing_date,
           total_due: falLatest.total_due,
+          minimum_due: falLatest.minimum_due,
+          pay_until: falLatest.pay_until,
           cupo_utilizado: falLatest.cupo_utilizado,
+          statements: falSorted.length,
         }
       : null,
+    cycles: cycleRows,
     expectedBchClose: bchJun?.closing_balance,
     expectedBeClose: beLatest?.closing_balance,
     bchDrift,

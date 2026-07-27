@@ -15,9 +15,11 @@ import { formatCLP, formatMonthTitle } from "@/lib/format";
 import {
   cashAccountsActualBalance,
   cashAccountsMonthNet,
+  cycleNetChange,
   getAccountMonthActivity,
   getCategories,
   getCategoryBreakdown,
+  getCreditCardCyclesByAccounts,
   getMonthlyBuckets,
   getMonthlyTrend,
   getPersonalAccountBalances,
@@ -88,17 +90,35 @@ export default async function DashboardPage({
   const monthCashNet = cashAccountsMonthNet(accounts, activity);
   const actualCash = cashAccountsActualBalance(accounts);
 
+  const creditIds = accounts
+    .filter((a) => a.subtype === "credit_card")
+    .map((a) => a.id);
+  const cyclesByAccount = await getCreditCardCyclesByAccounts(
+    supabase,
+    creditIds,
+    month,
+  );
+
   const accountsForSummary = accounts.slice(0, 3).map((a) => {
     const { monthNet } = monthNetFromActivity(
       activity.find((row) => row.account_id === a.id),
     );
+    const cycle =
+      a.subtype === "credit_card" ? cyclesByAccount.get(a.id) : null;
     return {
       id: a.id,
       name: a.name,
       kind: subtypeLabel(a.subtype),
       subtype: a.subtype,
-      monthNet,
+      monthNet:
+        a.subtype === "credit_card"
+          ? cycleNetChange(cycle?.previous_paid, cycle?.total_due)
+          : monthNet,
       actualBalance: a.balance,
+      totalDue: cycle?.total_due ?? null,
+      minimumDue: cycle?.minimum_due ?? null,
+      cycleStatus: cycle?.status ?? null,
+      previousPaid: cycle?.previous_paid ?? null,
     };
   });
 

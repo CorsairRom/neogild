@@ -227,6 +227,131 @@ export type Database = {
           },
         ]
       }
+      credit_card_cycles: {
+        Row: {
+          account_id: string
+          bank_transaction_id: string | null
+          billing_date: string
+          cmr_payment_transaction_id: string | null
+          created_at: string
+          cupo_disponible: number | null
+          cupo_total: number | null
+          cupo_utilizado: number | null
+          id: string
+          minimum_due: number | null
+          paid_amount: number
+          paid_at: string | null
+          pay_until: string | null
+          period_from: string | null
+          period_to: string | null
+          previous_billed: number | null
+          previous_paid: number | null
+          source_file: string | null
+          status: Database["public"]["Enums"]["credit_card_cycle_status"]
+          total_due: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          bank_transaction_id?: string | null
+          billing_date: string
+          cmr_payment_transaction_id?: string | null
+          created_at?: string
+          cupo_disponible?: number | null
+          cupo_total?: number | null
+          cupo_utilizado?: number | null
+          id?: string
+          minimum_due?: number | null
+          paid_amount?: number
+          paid_at?: string | null
+          pay_until?: string | null
+          period_from?: string | null
+          period_to?: string | null
+          previous_billed?: number | null
+          previous_paid?: number | null
+          source_file?: string | null
+          status?: Database["public"]["Enums"]["credit_card_cycle_status"]
+          total_due: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          bank_transaction_id?: string | null
+          billing_date?: string
+          cmr_payment_transaction_id?: string | null
+          created_at?: string
+          cupo_disponible?: number | null
+          cupo_total?: number | null
+          cupo_utilizado?: number | null
+          id?: string
+          minimum_due?: number | null
+          paid_amount?: number
+          paid_at?: string | null
+          pay_until?: string | null
+          period_from?: string | null
+          period_to?: string | null
+          previous_billed?: number | null
+          previous_paid?: number | null
+          source_file?: string | null
+          status?: Database["public"]["Enums"]["credit_card_cycle_status"]
+          total_due?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_card_cycles_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_card_cycles_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "credit_card_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_card_cycles_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "spa_reimbursables"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_card_cycles_bank_transaction_id_fkey"
+            columns: ["bank_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_card_cycles_cmr_payment_transaction_id_fkey"
+            columns: ["cmr_payment_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "spa_reimbursables"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_card_cycles_cmr_payment_transaction_id_fkey"
+            columns: ["cmr_payment_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_card_cycles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       debts: {
         Row: {
           account_id: string
@@ -1172,8 +1297,25 @@ export type Database = {
         }
         Returns: Json
       }
+      _book_email_own_transfer_pair: {
+        Args: {
+          p_amount: number
+          p_date: string
+          p_from_account_id: string
+          p_in_meta?: Json
+          p_needs_review?: boolean
+          p_out_meta: Json
+          p_to_account_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       _bucket_root: { Args: { p_category: string }; Returns: string }
       _counterparty_is_owner: {
+        Args: { p_counterparty: string; p_user_id: string }
+        Returns: boolean
+      }
+      _counterparty_matches_owner_strict: {
         Args: { p_counterparty: string; p_user_id: string }
         Returns: boolean
       }
@@ -1282,6 +1424,10 @@ export type Database = {
       }
       _pick_peer_account: {
         Args: { p_account_id: string; p_user_id: string }
+        Returns: string
+      }
+      _profile_or_inferred_owner_name: {
+        Args: { p_user_id: string }
         Returns: string
       }
       _update_account_balance: {
@@ -1669,6 +1815,17 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      match_credit_card_cycle_payment: {
+        Args: {
+          p_account_id?: string
+          p_amount: number
+          p_bank_transaction_id?: string
+          p_cmr_payment_transaction_id?: string
+          p_date: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       pair_cartola_own_transfers: {
         Args: { p_user_id?: string }
         Returns: Json
@@ -1778,6 +1935,7 @@ export type Database = {
         | "investment"
         | "property"
       account_type: "asset" | "liability"
+      credit_card_cycle_status: "open" | "partial" | "paid" | "overdue"
       debt_status: "active" | "paid" | "archived"
       document_type:
         | "factura_afecta"
@@ -1937,6 +2095,7 @@ export const Constants = {
         "property",
       ],
       account_type: ["asset", "liability"],
+      credit_card_cycle_status: ["open", "partial", "paid", "overdue"],
       debt_status: ["active", "paid", "archived"],
       document_type: [
         "factura_afecta",

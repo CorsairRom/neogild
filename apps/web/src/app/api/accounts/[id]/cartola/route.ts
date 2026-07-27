@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
+import { matchCyclePayment, upsertCycleFromStatement } from "@neogild/core";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { parseCartolaPdfBuffer } from "@/lib/cartola/pdf";
@@ -20,7 +21,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   const { data: account } = await supabase
     .from("accounts")
-    .select("id, name, user_id")
+    .select("id, name, user_id, subtype")
     .eq("id", accountId)
     .eq("user_id", user.id)
     .eq("is_archived", false)
@@ -75,7 +76,7 @@ export async function POST(request: Request, context: RouteContext) {
 
   if (parsed.lines.length === 0) {
     return NextResponse.json(
-      { error: "No se encontraron movimientos en el PDF. ¿Es una cartola BancoEstado/CuentaRUT?" },
+      { error: "No se encontraron movimientos en el PDF." },
       { status: 422 },
     );
   }
@@ -90,7 +91,9 @@ export async function POST(request: Request, context: RouteContext) {
   });
 
   const statementMonth =
-    parsed.meta.to?.slice(0, 7) ?? parsed.meta.issuedAt?.slice(0, 7) ?? new Date().toISOString().slice(0, 7);
+    parsed.meta.to?.slice(0, 7) ??
+    parsed.meta.issuedAt?.slice(0, 7) ??
+    new Date().toISOString().slice(0, 7);
 
   const result = await importCartolaLines(admin, {
     userId: user.id,
@@ -105,7 +108,24 @@ export async function POST(request: Request, context: RouteContext) {
   let reconciliation: { closingBalance: number; trackedBalance: number; delta: number } | null =
     null;
 
-  if (parsed.meta.closingBalance !== null) {
+  if (parsed.kind === "falabella_cmr" && parsed.statement) {
+    const stmt = parsed.statement;
+    const cycle = await upsertCycleFromStatement(admin, {
+      userId: user.id,
+      accountId: account.id,
+      statement: stmt,
+      sourceFile: safeName,
+      syncAccount: true,
+    });
+
+    if (cycle) {
+      reconciliation = {
+        closingBalance: -Math.abs(cycle.total_due),
+        trackedBalance: -Math.abs(cycle.total_due),
+        delta: 0,
+      };
+    }
+  } else if (parsed.meta.closingBalance !== null) {
     if (parsed.meta.to) {
       await admin
         .from("accounts")
@@ -114,6 +134,18 @@ export async function POST(request: Request, context: RouteContext) {
           last_statement_date: parsed.meta.to,
         })
         .eq("id", account.id);
+    }
+
+    // Debit cartola: try settling open TC cycles by amount/date on outflows.
+    if (account.subtype === "debit" || account.subtype === "cash") {
+      for (const line of parsed.lines) {
+        if (line.charge <= 0) continue;
+        await matchCyclePayment(admin, {
+          userId: user.id,
+          amount: line.charge,
+          date: line.date,
+        });
+      }
     }
 
     const { data: refreshed } = await admin
