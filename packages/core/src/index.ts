@@ -92,6 +92,24 @@ export type {
   UpsertCycleInput,
   MatchCyclePaymentInput,
 } from './credit-card-cycles'
+export {
+  listExpectedIncomes,
+  createExpectedIncome,
+  updateExpectedIncome,
+  deleteExpectedIncome,
+  getExpectedIncomesMonthSummary,
+  cashIncomeExpenseFromActivity,
+  laborMonthMatchWindow,
+  cashMonthMatchWindow,
+  pickMatchForExpected,
+} from './expected-incomes'
+export type {
+  ExpectedIncomeRow,
+  ExpectedIncomeAttribution,
+  ExpectedIncomeMonthItem,
+  ExpectedIncomeMonthStatus,
+  ExpectedIncomesMonthSummary,
+} from './expected-incomes'
 export type { GmailSyncSummary } from './sync'
 export {
   getCategoryBreakdown,

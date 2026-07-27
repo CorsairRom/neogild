@@ -125,6 +125,125 @@ export function MiniStat({
   );
 }
 
+export function ExpectedIncomesCard({
+  month,
+  expectedTotal,
+  confirmedTotal,
+  pendingTotal,
+  items,
+}: {
+  month: string;
+  expectedTotal: number;
+  confirmedTotal: number;
+  pendingTotal: number;
+  items: Array<{
+    name: string;
+    status: "confirmed" | "pending" | "missing";
+    expected_amount: number;
+    confirmed_amount: number | null;
+    matched_date: string | null;
+  }>;
+}) {
+  if (items.length === 0) {
+    return (
+      <div className="ng-card ng-rise flex flex-col gap-3 p-5">
+        <h2 className="m-0 text-base font-medium">Ingresos esperados</h2>
+        <p className="m-0 text-[13px] text-muted">
+          Configurá tu sueldo u otros haberes fijos para verlos como referencia
+          cada mes.
+        </p>
+        <Link href="/settings/incomes" className="ng-btn ng-btn-ghost self-start !p-0 text-[13px]">
+          Ir a configuración
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ng-card ng-rise flex flex-col gap-4 p-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="m-0 text-base font-medium">Ingresos esperados</h2>
+        <Link
+          href="/settings/incomes"
+          className="ng-btn ng-btn-ghost !p-0 text-[13px]"
+        >
+          Editar
+        </Link>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <p className="m-0 text-[11px] text-faint">Esperado</p>
+          <p className="m-0 text-sm font-semibold tabular-nums">
+            <Amount>{formatCLP(expectedTotal)}</Amount>
+          </p>
+        </div>
+        <div>
+          <p className="m-0 text-[11px] text-faint">Confirmado</p>
+          <p className="m-0 text-sm font-semibold tabular-nums" style={{ color: "var(--pos)" }}>
+            <Amount>{formatCLP(confirmedTotal)}</Amount>
+          </p>
+        </div>
+        <div>
+          <p className="m-0 text-[11px] text-faint">Pendiente</p>
+          <p
+            className="m-0 text-sm font-semibold tabular-nums"
+            style={pendingTotal > 0 ? { color: "var(--warn)" } : undefined}
+          >
+            <Amount>{formatCLP(pendingTotal)}</Amount>
+          </p>
+        </div>
+      </div>
+      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+        {items.map((item) => (
+          <li
+            key={item.name + item.expected_amount}
+            className="flex items-center justify-between gap-3 rounded-[10px] bg-surface-2 px-3 py-2.5 text-sm"
+          >
+            <span className="min-w-0">
+              <span className="block truncate font-medium">{item.name}</span>
+              <span className="block text-xs text-faint">
+                {item.status === "confirmed" && item.matched_date
+                  ? `Abonado ${item.matched_date}`
+                  : item.status === "pending"
+                    ? "Aún no abona en cartola"
+                    : "No encontrado en ventana"}
+              </span>
+            </span>
+            <span className="flex flex-none flex-col items-end gap-0.5">
+              <span className="tabular-nums">
+                <Amount>
+                  {formatCLP(item.confirmed_amount ?? item.expected_amount)}
+                </Amount>
+              </span>
+              <span
+                className="text-[11px]"
+                style={{
+                  color:
+                    item.status === "confirmed"
+                      ? "var(--pos)"
+                      : item.status === "pending"
+                        ? "var(--warn)"
+                        : "var(--neg)",
+                }}
+              >
+                {item.status === "confirmed"
+                  ? "confirmado"
+                  : item.status === "pending"
+                    ? "pendiente"
+                    : "faltante"}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="m-0 text-[12px] text-faint">
+        Referencia del mes {month}. No inventa asientos: solo cruza con abonos
+        reales.
+      </p>
+    </div>
+  );
+}
+
 export function ReviewNudge({ count, amount }: { count: number; amount: number }) {
   if (count <= 0) return null;
   return (

@@ -5,6 +5,7 @@ import {
   AccountsSummaryCard,
   CategoryBreakdown,
   EmailStatusCard,
+  ExpectedIncomesCard,
   HeroBalanceCard,
   MiniStat,
   ReviewNudge,
@@ -15,11 +16,13 @@ import { formatCLP, formatMonthTitle } from "@/lib/format";
 import {
   cashAccountsActualBalance,
   cashAccountsMonthNet,
+  cashIncomeExpenseFromActivity,
   cycleNetChange,
   getAccountMonthActivity,
   getCategories,
   getCategoryBreakdown,
   getCreditCardCyclesByAccounts,
+  getExpectedIncomesMonthSummary,
   getMonthlyBuckets,
   getMonthlyTrend,
   getPersonalAccountBalances,
@@ -66,7 +69,7 @@ export default async function DashboardPage({
   const categories = await getCategories(supabase, { entity: "personal" });
   const categoryLabels = new Map(categories.map((c) => [c.id, c.name]));
 
-  const [buckets, breakdown, trend, reviewResult, syncResult, accounts, activity] =
+  const [buckets, breakdown, trend, reviewResult, syncResult, accounts, activity, expected] =
     await Promise.all([
       getMonthlyBuckets(supabase, { month }),
       getCategoryBreakdown(supabase, month, categoryLabels),
@@ -79,13 +82,14 @@ export default async function DashboardPage({
       supabase.from("sync_state").select("gmail_watermark").maybeSingle(),
       getPersonalAccountBalances(supabase),
       getAccountMonthActivity(supabase, month),
+      getExpectedIncomesMonthSummary(supabase, month),
     ]);
 
   const reviewCount = reviewResult.count ?? 0;
   const syncState = syncResult.data;
 
-  const gastos =
-    buckets.necesidades + buckets.consumo + buckets.ahorro + buckets.por_categorizar;
+  const cashFlow = cashIncomeExpenseFromActivity(accounts, activity);
+  const teQueda = cashFlow.income - cashFlow.expense;
 
   const monthCashNet = cashAccountsMonthNet(accounts, activity);
   const actualCash = cashAccountsActualBalance(accounts);
@@ -142,14 +146,28 @@ export default async function DashboardPage({
           />
 
           <div className="grid grid-cols-3 gap-3">
-            <MiniStat label="Entró" value={formatCLP(buckets.income)} tone="pos" />
-            <MiniStat label="Salió" value={formatCLP(gastos)} tone="neg" />
+            <MiniStat label="Entró (caja)" value={formatCLP(cashFlow.income)} tone="pos" />
+            <MiniStat label="Salió (caja)" value={formatCLP(cashFlow.expense)} tone="neg" />
             <MiniStat
-              label="Te queda"
-              value={formatCLP(buckets.disponible, { signed: true })}
-              tone={buckets.disponible < 0 ? "neg" : undefined}
+              label="Te queda (caja)"
+              value={formatCLP(teQueda, { signed: true })}
+              tone={teQueda < 0 ? "neg" : undefined}
             />
           </div>
+
+          <ExpectedIncomesCard
+            month={month}
+            expectedTotal={expected.expected_total}
+            confirmedTotal={expected.confirmed_total}
+            pendingTotal={expected.pending_total}
+            items={expected.items.map((i) => ({
+              name: i.income.name,
+              status: i.status,
+              expected_amount: i.expected_amount,
+              confirmed_amount: i.confirmed_amount,
+              matched_date: i.matched_date,
+            }))}
+          />
 
           <ReviewNudge count={reviewCount} amount={buckets.por_categorizar} />
 

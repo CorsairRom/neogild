@@ -559,6 +559,73 @@ export type Database = {
         }
         Relationships: []
       }
+      expected_incomes: {
+        Row: {
+          account_id: string | null
+          amount: number
+          attribution: string
+          created_at: string
+          id: string
+          is_active: boolean
+          match_pattern: string | null
+          name: string
+          sort_order: number
+          typical_day: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id?: string | null
+          amount: number
+          attribution?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          match_pattern?: string | null
+          name: string
+          sort_order?: number
+          typical_day?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string | null
+          amount?: number
+          attribution?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          match_pattern?: string | null
+          name?: string
+          sort_order?: number
+          typical_day?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expected_incomes_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expected_incomes_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "credit_card_status"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expected_incomes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       feedback_log: {
         Row: {
           amount: number | null
